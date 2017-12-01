@@ -1,0 +1,13 @@
+[package]
+name = "time_game"
+version = "0.1.0"
+authors = ["Roger Curley <rocurley@gmail.com>"]
+
+[dependencies]
+tree = { path = "tree" }
+types = { path = "types" }
+
+conrod = { version = "0.55.0", features = ["glium", "winit"]}
+ndarray = "0.10.12"
+glium = "0.17"
+winit = "0.7"
