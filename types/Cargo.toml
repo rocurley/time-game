@@ -1,4 +1,5 @@
 [package]
+
 name = "types"
 version = "0.1.0"
 authors = ["Roger Curley <rocurley@gmail.com>"]
@@ -7,3 +8,4 @@ authors = ["Roger Curley <rocurley@gmail.com>"]
 tree = { path = "../tree" }
 conrod = "0.55.0"
 ndarray = "0.10.12"
+glium = "0.17"

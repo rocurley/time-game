@@ -1,11 +1,17 @@
 #[macro_use]
 extern crate conrod;
+extern crate glium;
 extern crate tree;
+#[macro_use(array)]
 extern crate ndarray;
 
 use std::collections::HashMap;
 use conrod::{color, widget, Positionable, Widget, Sizeable, Colorable, Labelable};
-use ndarray::{ShapeBuilder, Zip, Array2};
+use ndarray::{ShapeBuilder, Zip, Array2, ArrayView, ArrayViewMut};
+
+pub struct ImageIds {
+    pub jump_icon : conrod::image::Id,
+}
 
 pub struct GameFrame {
     pub players : Vec<Player>,
@@ -43,7 +49,10 @@ impl GameState {
         }
     }
 
-    pub fn render(&mut self, ui_cell : &mut conrod::UiCell) -> bool {
+    pub fn render(&mut self,
+                  ui_cell : &mut conrod::UiCell,
+                  image_map : & conrod::image::Map::<glium::texture::SrgbTexture2d>,
+                  image_ids : ImageIds) -> bool {
         const COLS : usize = 6;
         const ROWS : usize = 6;
         let mut elements = widget::Matrix::new(COLS, ROWS)
@@ -90,9 +99,8 @@ impl GameState {
             }
             circle.set(player.ids.player, ui_cell);
             if let Some(player_move) = self.current_plan.moves.get(& player.get_id()) {
-                player_move.symbol()
-                    .right_from(player.ids.player,0.0)
-                    //.middle_of(parent_elem.widget_id)
+                player_move.widget(image_ids.jump_icon)
+                    .parent(player.ids.player)
                     .set(player.ids.planned_move, ui_cell)
             }
             for click in ui_cell.widget_input(player.get_id()).clicks(){
@@ -110,20 +118,77 @@ pub struct Constraint {
     pub timestamp : usize,
     pub player_position : Point,
 }
-
 #[derive(Clone)]
-pub enum Move {
+pub enum Direction {
     Up,
     Down,
     Left,
     Right,
+}
+
+impl Direction {
+    fn rotation(& self) -> Array2<f64> {
+        match *self {
+            Direction::Up => array![[1., 0.],
+                         [0., 1.]],
+            Direction::Down => array![[-1.,  0.],
+                           [ 0., -1.]],
+            Direction::Left => array![[ 0., -1.],
+                           [1., 0.]],
+            Direction::Right => array![[0., 1.],
+                            [-1.,  0.]],
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum Move {
+    Direction(Direction),
     Jump
 }
 
+trait Setable : Positionable {
+    type Event;
+    fn wrapped_set<'a, 'b>(self, id: widget::Id, ui_cell: &'a mut conrod::UiCell<'b>) -> Self::Event;
+}
+
+impl<W> Setable for W
+    where W: Widget,
+          {
+              type Event = W::Event;
+              fn wrapped_set<'a, 'b>(self, id: widget::Id, ui_cell: &'a mut conrod::UiCell<'b>) -> Self::Event{
+                  self.set(id, ui_cell)
+              }
+          }
+
+
 impl Move {
-    pub fn symbol(& self) -> widget::Polygon<Vec<conrod::Point>> {
-        widget::Polygon::centred_fill(vec![[0.0, 0.0], [0.0,50.0], [25.0, 25.0]])
-            .color(color::BLUE)
+    pub fn widget(& self, jump_image_id : conrod::image::Id) -> Box<Setable<Event=()>> {
+        match *self {
+            Move::Direction(ref direction) => {
+                let unrotated_points = vec![[0.0, 0.0], [50.0,0.0], [25.0, 25.0]];
+                let mut points = vec![[0.,0.];3];
+                for (x,y) in unrotated_points.iter().zip(points.iter_mut()) {
+                    //y <- a A x + b y
+                    ndarray::linalg::general_mat_vec_mul(1.,//a
+                                                         & direction.rotation(),//A
+                                                         & ArrayView::from(x),//x
+                                                         1.,//b
+                                                         & mut ArrayViewMut::from(y)//y
+                                                         );
+                }
+                let triangle = widget::Polygon::centred_fill(points).color(color::BLUE);
+                Box::new(match *direction {
+                    Direction::Up => triangle.up(0.).align_middle_x(),
+                    Direction::Down => triangle.down(0.).align_middle_x(),
+                    Direction::Left => triangle.left(0.).align_middle_y(),
+                    Direction::Right => triangle.right(0.).align_middle_y(),
+                })
+            },
+            Move::Jump => {
+                Box::new(widget::Image::new(jump_image_id))
+            }
+        }
     }
 }
 

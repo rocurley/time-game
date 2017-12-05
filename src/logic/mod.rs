@@ -1,29 +1,33 @@
 extern crate types;
 
-use self::types::{GameState, GameFrame, Constraint, Move, Plan, Player};
+use self::types::{GameState, GameFrame, Constraint, Move, Direction, Plan, Player};
 
 use std::collections::hash_map::Entry;
 
-pub fn apply_plan(initial_frame : & GameFrame, plan : Plan) -> Result<GameFrame, & 'static str> {
+pub fn apply_plan(initial_frame : & GameFrame, plan : & Plan) -> Result<GameFrame, & 'static str> {
     let mut constraints = initial_frame.constraints.clone();
     initial_frame.players.iter().filter_map(|old_player : & Player| {
-        let mut player : Player = old_player.clone();
         match plan.moves.get(& old_player.get_id()) {
-            None => {},
-            Some(& Move::Up)    => player.position.1 += 1,
-            Some(& Move::Down)  => player.position.1 -= 1,
-            Some(& Move::Left)  => player.position.0 -= 1,
-            Some(& Move::Right) => player.position.0 += 1,
+            None => Some(Ok(old_player.clone())),
+            Some(& Move::Direction(ref direction)) => {
+                let mut player : Player = old_player.clone();
+                match *direction {
+                    Direction::Up    => player.position.0 -= 1,
+                    Direction::Down  => player.position.0 += 1,
+                    Direction::Left  => player.position.1 -= 1,
+                    Direction::Right => player.position.1 += 1,
+                }
+                Some(Ok(player))
+            },
             Some(& Move::Jump) => {
-                if let Entry::Occupied(constraint) = constraints.entry(player.position){
+                if let Entry::Occupied(constraint) = constraints.entry(old_player.position){
                     constraint.remove_entry();
-                    return None;
+                    None
                 } else {
-                    return Some(Err("Tried to close loop at wrong positon"));
+                    Some(Err("Tried to close loop at wrong positon"))
                 }
             }
         }
-        return Some(Ok(player))
     }).collect::<Result<Vec<Player>,& str>>().map(|players| {
         GameFrame{ players, constraints}
     })
