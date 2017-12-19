@@ -11,6 +11,7 @@ use ndarray::{ShapeBuilder, Zip, Array2, ArrayView, ArrayViewMut};
 
 pub struct ImageIds {
     pub jump_icon : conrod::image::Id,
+    pub move_arrows : [conrod::image::Id;4],
 }
 
 pub struct GameFrame {
@@ -52,7 +53,7 @@ impl GameState {
     pub fn render(&mut self,
                   ui_cell : &mut conrod::UiCell,
                   image_map : & conrod::image::Map::<glium::texture::SrgbTexture2d>,
-                  image_ids : ImageIds) -> bool {
+                  image_ids : & ImageIds) -> bool {
         const COLS : usize = 6;
         const ROWS : usize = 6;
         let mut elements = widget::Matrix::new(COLS, ROWS)
@@ -91,6 +92,7 @@ impl GameState {
                 .color(color::GREEN)
                 //.label("Player")
                 //.parent(parent_elem.widget_id)
+                //.middle();
                 .middle_of(parent_elem.widget_id);
             if let Some(Selection::Player(selectedPlayerId)) = self.selected {
                 if selectedPlayerId == player.get_id() {
@@ -99,7 +101,7 @@ impl GameState {
             }
             circle.set(player.ids.player, ui_cell);
             if let Some(player_move) = self.current_plan.moves.get(& player.get_id()) {
-                player_move.widget(image_ids.jump_icon)
+                player_move.widget(image_ids)
                     .parent(player.ids.player)
                     .set(player.ids.planned_move, ui_cell)
             }
@@ -147,23 +149,9 @@ pub enum Move {
     Jump
 }
 
-trait Setable : Positionable {
-    type Event;
-    fn wrapped_set<'a, 'b>(self, id: widget::Id, ui_cell: &'a mut conrod::UiCell<'b>) -> Self::Event;
-}
-
-impl<W> Setable for W
-    where W: Widget,
-          {
-              type Event = W::Event;
-              fn wrapped_set<'a, 'b>(self, id: widget::Id, ui_cell: &'a mut conrod::UiCell<'b>) -> Self::Event{
-                  self.set(id, ui_cell)
-              }
-          }
-
 
 impl Move {
-    pub fn widget(& self, jump_image_id : conrod::image::Id) -> Box<Setable<Event=()>> {
+    pub fn widget(& self, image_ids : & ImageIds) -> widget::Image {
         match *self {
             Move::Direction(ref direction) => {
                 let unrotated_points = vec![[0.0, 0.0], [50.0,0.0], [25.0, 25.0]];
@@ -177,16 +165,21 @@ impl Move {
                                                          & mut ArrayViewMut::from(y)//y
                                                          );
                 }
-                let triangle = widget::Polygon::centred_fill(points).color(color::BLUE);
-                Box::new(match *direction {
+                let triangle = match *direction {
+                    Direction::Up => widget::Image::new(image_ids.move_arrows[0]),
+                    Direction::Left => widget::Image::new(image_ids.move_arrows[1]),
+                    Direction::Down => widget::Image::new(image_ids.move_arrows[2]),
+                    Direction::Right => widget::Image::new(image_ids.move_arrows[3]),
+                };
+                match *direction {
                     Direction::Up => triangle.up(0.).align_middle_x(),
                     Direction::Down => triangle.down(0.).align_middle_x(),
                     Direction::Left => triangle.left(0.).align_middle_y(),
                     Direction::Right => triangle.right(0.).align_middle_y(),
-                })
+                }
             },
             Move::Jump => {
-                Box::new(widget::Image::new(jump_image_id))
+                widget::Image::new(image_ids.jump_icon).middle()
             }
         }
     }

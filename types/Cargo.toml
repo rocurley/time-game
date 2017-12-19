@@ -6,6 +6,6 @@ authors = ["Roger Curley <rocurley@gmail.com>"]
 
 [dependencies]
 tree = { path = "../tree" }
-conrod = "0.55.0"
+conrod = "0.56.0"
 ndarray = "0.10.12"
-glium = "0.17"
+glium = "0.18"
