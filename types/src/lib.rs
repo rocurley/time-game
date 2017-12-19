@@ -5,8 +5,8 @@ extern crate tree;
 #[macro_use(array)]
 extern crate ndarray;
 
-use std::collections::HashMap;
-use conrod::{color, widget, Positionable, Widget, Sizeable, Colorable, Labelable};
+use std::collections::{HashMap, HashSet};
+use conrod::{color, widget, Positionable, Widget, Sizeable, Colorable};
 use ndarray::{ShapeBuilder, Zip, Array2, ArrayView, ArrayViewMut};
 
 pub struct ImageIds {
@@ -52,7 +52,6 @@ impl GameState {
 
     pub fn render(&mut self,
                   ui_cell : &mut conrod::UiCell,
-                  image_map : & conrod::image::Map::<glium::texture::SrgbTexture2d>,
                   image_ids : & ImageIds) -> bool {
         const COLS : usize = 6;
         const ROWS : usize = 6;
@@ -85,6 +84,15 @@ impl GameState {
             }
         });
 
+        for (& (x,y), constraint) in self.current_frame.constraints.iter_mut() {
+            let parent_elem = grid_cells[[x,y]];
+            let id = constraint.id.get_or_insert(ui_cell.widget_id_generator().next());
+            widget::Circle::fill(40.)
+                .color(color::BLUE)
+                .middle_of(parent_elem.widget_id)
+                .set(*id, ui_cell);
+        }
+
         for player in self.current_frame.players.iter() {
             //buttons[player.position] = buttons[player.position].clone().color(color::GREEN).label("Player");
             let parent_elem = grid_cells[player.position];
@@ -105,7 +113,7 @@ impl GameState {
                     .parent(player.ids.player)
                     .set(player.ids.planned_move, ui_cell)
             }
-            for click in ui_cell.widget_input(player.get_id()).clicks(){
+            for _click in ui_cell.widget_input(player.get_id()).clicks(){
                 self.selected = Some(Selection::Player(player.get_id()));
                 should_update = true;
             }
@@ -117,9 +125,17 @@ impl GameState {
 
 #[derive(Clone)]
 pub struct Constraint {
+    id : Option<widget::Id>,
     pub timestamp : usize,
     pub player_position : Point,
 }
+
+impl Constraint {
+    pub fn new(timestamp : usize, player_position : Point) -> Self {
+        Constraint{id : None, timestamp, player_position}
+    }
+}
+
 #[derive(Clone)]
 pub enum Direction {
     Up,
@@ -187,12 +203,15 @@ impl Move {
 
 pub struct Plan {
     pub moves : HashMap<widget::Id, Move>,
+    pub portals : HashSet<(usize, usize)>
 }
 
 impl Plan {
     pub fn new() -> Self {
         Plan {
-            moves : HashMap::new()
+            moves : HashMap::new(),
+            portals : HashSet::new(),
+
         }
     }
 }

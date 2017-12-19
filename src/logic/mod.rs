@@ -1,6 +1,7 @@
 extern crate types;
 
 use self::types::{GameState, GameFrame, Constraint, Move, Direction, Plan, Player};
+use conrod::widget;
 
 use std::collections::hash_map::Entry;
 
@@ -29,6 +30,7 @@ pub fn apply_plan(initial_frame : & GameFrame, plan : & Plan) -> Result<GameFram
             }
         }
     }).collect::<Result<Vec<Player>,& str>>().map(|players| {
+        constraints.extend(plan.portals.iter().map(|& pos| (pos, Constraint::new(0, pos))));
         GameFrame{ players, constraints}
     })
 }
