@@ -1,13 +1,18 @@
+#![feature(i128_type)]
+
 #[macro_use]
 extern crate conrod;
 extern crate glium;
 extern crate tree;
 #[macro_use(array)]
 extern crate ndarray;
+extern crate rand;
 
 use std::collections::{HashMap, HashSet};
 use conrod::{color, widget, Positionable, Widget, Sizeable, Colorable};
 use ndarray::{ShapeBuilder, Zip, Array2, ArrayView, ArrayViewMut};
+
+type Id = u64;
 
 pub struct ImageIds {
     pub jump_icon : conrod::image::Id,
@@ -28,8 +33,9 @@ impl GameFrame {
     }
 }
 
+#[derive(PartialEq, Eq)]
 pub enum Selection {
-    Player(widget::Id),
+    Player(Id),
     GridCell(Point),
 }
 
@@ -93,28 +99,27 @@ impl GameState {
                 .set(*id, ui_cell);
         }
 
-        for player in self.current_frame.players.iter() {
+        for player in self.current_frame.players.iter_mut() {
             //buttons[player.position] = buttons[player.position].clone().color(color::GREEN).label("Player");
             let parent_elem = grid_cells[player.position];
+            let widget_ids = player.widget_ids.get_or_insert(PlayerIds::new(ui_cell.widget_id_generator()));
             let mut circle = widget::Circle::fill(30.0)
                 .color(color::GREEN)
                 //.label("Player")
                 //.parent(parent_elem.widget_id)
                 //.middle();
                 .middle_of(parent_elem.widget_id);
-            if let Some(Selection::Player(selectedPlayerId)) = self.selected {
-                if selectedPlayerId == player.get_id() {
-                    circle = circle.clone().color(color::RED);
-                }
+            if Some(Selection::Player(player.id)) == self.selected {
+                circle = circle.clone().color(color::RED);
             }
-            circle.set(player.ids.player, ui_cell);
-            if let Some(player_move) = self.current_plan.moves.get(& player.get_id()) {
+            circle.set(widget_ids.player, ui_cell);
+            if let Some(player_move) = self.current_plan.moves.get(& player.id) {
                 player_move.widget(image_ids)
-                    .parent(player.ids.player)
-                    .set(player.ids.planned_move, ui_cell)
+                    .parent(widget_ids.player)
+                    .set(widget_ids.planned_move, ui_cell)
             }
-            for _click in ui_cell.widget_input(player.get_id()).clicks(){
-                self.selected = Some(Selection::Player(player.get_id()));
+            for _click in ui_cell.widget_input(widget_ids.player).clicks(){
+                self.selected = Some(Selection::Player(player.id));
                 should_update = true;
             }
         }
@@ -202,7 +207,7 @@ impl Move {
 }
 
 pub struct Plan {
-    pub moves : HashMap<widget::Id, Move>,
+    pub moves : HashMap<Id, Move>,
     pub portals : HashSet<(usize, usize)>
 }
 
@@ -226,16 +231,14 @@ widget_ids! {
 
 #[derive(Clone)]
 pub struct Player {
-    ids : PlayerIds,
+    widget_ids : Option<PlayerIds>,
+    pub id : Id,
     pub position : Point,
 }
 
 impl Player {
-    pub fn new(id_generator : widget::id::Generator, position : Point) -> Self {
-        Player{ids : PlayerIds::new(id_generator), position}
-    }
-    pub fn get_id(& self) -> widget::Id {
-        self.ids.player
+    pub fn new(position : Point) -> Self {
+        Player{widget_ids : None, id : rand::random(), position}
     }
 }
 

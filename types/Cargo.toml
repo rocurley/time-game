@@ -9,3 +9,4 @@ tree = { path = "../tree" }
 conrod = "0.56.0"
 ndarray = "0.10.12"
 glium = "0.18"
+rand = "0.4.1"

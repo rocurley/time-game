@@ -62,7 +62,7 @@ fn main() {
     };
 
     let mut game_state = GameState::new(& mut ui.widget_id_generator());
-    game_state.current_frame.players.push(Player::new(ui.widget_id_generator(), (0,4)));
+    game_state.current_frame.players.push(Player::new((0,4)));
 
     let mut main_loop = support::EventLoop::new();
     'main: loop {
