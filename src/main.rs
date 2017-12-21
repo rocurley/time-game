@@ -161,6 +161,9 @@ fn main() {
                         None => {}
                     }
                     match key {
+                        Key::Tab => if let Err(err) = game_state.rotate_plan() {
+                            println!("{}", err);
+                        },
                         Key::Backspace => match game_state.history.up() {
                             Ok(ix) => {
                                 game_state.current_plan = CachablePlan::Old(ix);

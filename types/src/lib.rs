@@ -64,6 +64,19 @@ impl GameState {
         }
     }
 
+    pub fn rotate_plan(&mut self) -> Result<(), &str> {
+        match self.history.focus.children.len() {
+            0 => Err("No future recorded: can't cycle plans"),
+            l => {
+                self.current_plan = match self.current_plan {
+                    CachablePlan::Old(i) => CachablePlan::Old(i.checked_sub(1).unwrap_or(l - 1)),
+                    CachablePlan::Novel(_) => CachablePlan::Old(l - 1),
+                };
+                Ok(())
+            }
+        }
+    }
+
     pub fn render(&mut self, ui_cell: &mut conrod::UiCell, image_ids: &ImageIds) -> bool {
         const COLS: usize = 6;
         const ROWS: usize = 6;
