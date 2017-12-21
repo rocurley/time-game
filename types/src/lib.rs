@@ -3,32 +3,32 @@
 #[macro_use]
 extern crate conrod;
 extern crate glium;
-extern crate tree;
 #[macro_use(array)]
 extern crate ndarray;
 extern crate rand;
+extern crate tree;
 
 use std::collections::{HashMap, HashSet};
-use conrod::{color, widget, Positionable, Widget, Sizeable, Colorable};
-use ndarray::{ShapeBuilder, Zip, Array2, ArrayView, ArrayViewMut};
+use conrod::{color, widget, Colorable, Positionable, Sizeable, Widget};
+use ndarray::{Array2, ArrayView, ArrayViewMut, ShapeBuilder, Zip};
 
 type Id = u64;
 
 pub struct ImageIds {
-    pub jump_icon : conrod::image::Id,
-    pub move_arrows : [conrod::image::Id;4],
+    pub jump_icon: conrod::image::Id,
+    pub move_arrows: [conrod::image::Id; 4],
 }
 
 pub struct GameFrame {
-    pub players : Vec<Player>,
-    pub constraints : HashMap<(usize, usize), Constraint>,
+    pub players: Vec<Player>,
+    pub constraints: HashMap<(usize, usize), Constraint>,
 }
 
 impl GameFrame {
     pub fn new() -> Self {
         GameFrame {
-            players : Vec::new(),
-            constraints : HashMap::new(),
+            players: Vec::new(),
+            constraints: HashMap::new(),
         }
     }
 }
@@ -48,29 +48,27 @@ widget_ids! {
 }
 
 pub struct GameState {
-    ids : GameStateIds,
-    pub history : tree::Zipper<GameFrame, Plan>,
-    pub selected : Option<Selection>,
-    pub current_plan : Plan,
+    ids: GameStateIds,
+    pub history: tree::Zipper<GameFrame, Plan>,
+    pub selected: Option<Selection>,
+    pub current_plan: Plan,
 }
 
 impl GameState {
-    pub fn new(id_generator : widget::id::Generator) -> Self {
+    pub fn new(id_generator: widget::id::Generator) -> Self {
         GameState {
-            ids : GameStateIds::new(id_generator),
-            history : tree::Zipper::new(tree::RoseTree::singleton(GameFrame::new())),
-            selected : None,
-            current_plan : Plan::new(),
+            ids: GameStateIds::new(id_generator),
+            history: tree::Zipper::new(tree::RoseTree::singleton(GameFrame::new())),
+            selected: None,
+            current_plan: Plan::new(),
         }
     }
 
-    pub fn render(&mut self,
-                  ui_cell : &mut conrod::UiCell,
-                  image_ids : & ImageIds) -> bool {
-        const COLS : usize = 6;
-        const ROWS : usize = 6;
+    pub fn render(&mut self, ui_cell: &mut conrod::UiCell, image_ids: &ImageIds) -> bool {
+        const COLS: usize = 6;
+        const ROWS: usize = 6;
         let mut elements = widget::Matrix::new(COLS, ROWS)
-            .w_h(ui_cell.win_w , ui_cell.win_h)
+            .w_h(ui_cell.win_w, ui_cell.win_h)
             .middle_of(ui_cell.window)
             .set(self.ids.grid, ui_cell);
         let mut should_update = false;
@@ -79,28 +77,34 @@ impl GameState {
         while let Some(elem) = elements.next(ui_cell) {
             elements_vec.push(elem);
         }
-        let mut grid_cells = ndarray::Array2::from_shape_vec((ROWS,COLS).f(), elements_vec).unwrap();
-        let mut buttons = Array2::from_shape_fn(grid_cells.raw_dim(),|_|
-                                                widget::Button::new()//.color(color::TRANSPARENT)
-                                                );
-        if let Some(Selection::GridCell((r,c))) = self.selected {
+        let mut grid_cells =
+            ndarray::Array2::from_shape_vec((ROWS, COLS).f(), elements_vec).unwrap();
+        let mut buttons = Array2::from_shape_fn(
+            grid_cells.raw_dim(),
+            |_| widget::Button::new(), //.color(color::TRANSPARENT)
+        );
+        if let Some(Selection::GridCell((r, c))) = self.selected {
             //let luminance = n as f32 / (COLS * ROWS) as f32;
             //let button = widget::Button::new().color(color::BLUE.with_luminance(luminance));
-            buttons[(r,c)].style.color = Some(color::RED);
+            buttons[(r, c)].style.color = Some(color::RED);
         }
 
-        Zip::indexed(&mut grid_cells).and(&mut buttons).apply(|(r,c), elem, button| {
-            assert_eq!((r,c), (elem.row, elem.col));
-            for _click in elem.set(button.clone(), ui_cell) {
-                self.selected = Some(Selection::GridCell((r,c)));
-                should_update = true;
-                //println!("Hey! {:?}", (r, c));
-            }
-        });
+        Zip::indexed(&mut grid_cells)
+            .and(&mut buttons)
+            .apply(|(r, c), elem, button| {
+                assert_eq!((r, c), (elem.row, elem.col));
+                for _click in elem.set(button.clone(), ui_cell) {
+                    self.selected = Some(Selection::GridCell((r, c)));
+                    should_update = true;
+                    //println!("Hey! {:?}", (r, c));
+                }
+            });
 
-        for (& (x,y), constraint) in self.history.get_focus_val_mut().constraints.iter_mut() {
-            let parent_elem = grid_cells[[x,y]];
-            let id = constraint.id.get_or_insert(ui_cell.widget_id_generator().next());
+        for (&(x, y), constraint) in self.history.get_focus_val_mut().constraints.iter_mut() {
+            let parent_elem = grid_cells[[x, y]];
+            let id = constraint
+                .id
+                .get_or_insert(ui_cell.widget_id_generator().next());
             widget::Circle::fill(40.)
                 .color(color::BLUE)
                 .middle_of(parent_elem.widget_id)
@@ -110,7 +114,9 @@ impl GameState {
         for player in self.history.get_focus_val_mut().players.iter_mut() {
             //buttons[player.position] = buttons[player.position].clone().color(color::GREEN).label("Player");
             let parent_elem = grid_cells[player.position];
-            let widget_ids = player.widget_ids.get_or_insert(PlayerIds::new(ui_cell.widget_id_generator()));
+            let widget_ids = player
+                .widget_ids
+                .get_or_insert(PlayerIds::new(ui_cell.widget_id_generator()));
             let mut circle = widget::Circle::fill(30.0)
                 .color(color::GREEN)
                 //.label("Player")
@@ -121,41 +127,48 @@ impl GameState {
                 circle = circle.clone().color(color::RED);
             }
             circle.set(widget_ids.player, ui_cell);
-            if let Some(player_move) = self.current_plan.moves.get(& player.id) {
-                player_move.widget(image_ids)
+            if let Some(player_move) = self.current_plan.moves.get(&player.id) {
+                player_move
+                    .widget(image_ids)
                     .parent(widget_ids.player)
                     .set(widget_ids.planned_move, ui_cell)
             }
-            for _click in ui_cell.widget_input(widget_ids.player).clicks(){
+            for _click in ui_cell.widget_input(widget_ids.player).clicks() {
                 self.selected = Some(Selection::Player(player.id));
                 should_update = true;
             }
         }
         let mut portals_ids = self.ids.planned_portals.walk();
-        for & (x,y) in self.current_plan.portals.iter() {
-            let parent_elem = grid_cells[[x,y]];
-            let id = portals_ids.next(& mut self.ids.planned_portals, & mut ui_cell.widget_id_generator());
-            let color = color::Color::Rgba(0.,0.,0.7,0.5);
+        for &(x, y) in self.current_plan.portals.iter() {
+            let parent_elem = grid_cells[[x, y]];
+            let id = portals_ids.next(
+                &mut self.ids.planned_portals,
+                &mut ui_cell.widget_id_generator(),
+            );
+            let color = color::Color::Rgba(0., 0., 0.7, 0.5);
             widget::Circle::fill(40.)
                 .color(color)
                 .middle_of(parent_elem.widget_id)
                 .set(id, ui_cell);
         }
-        return should_update 
+        return should_update;
     }
 }
 
-
 #[derive(Clone)]
 pub struct Constraint {
-    id : Option<widget::Id>,
-    pub timestamp : usize,
-    pub player_position : Point,
+    id: Option<widget::Id>,
+    pub timestamp: usize,
+    pub player_position: Point,
 }
 
 impl Constraint {
-    pub fn new(timestamp : usize, player_position : Point) -> Self {
-        Constraint{id : None, timestamp, player_position}
+    pub fn new(timestamp: usize, player_position: Point) -> Self {
+        Constraint {
+            id: None,
+            timestamp,
+            player_position,
+        }
     }
 }
 
@@ -168,16 +181,12 @@ pub enum Direction {
 }
 
 impl Direction {
-    fn rotation(& self) -> Array2<f64> {
+    fn rotation(&self) -> Array2<f64> {
         match *self {
-            Direction::Up => array![[1., 0.],
-                         [0., 1.]],
-            Direction::Down => array![[-1.,  0.],
-                           [ 0., -1.]],
-            Direction::Left => array![[ 0., -1.],
-                           [1., 0.]],
-            Direction::Right => array![[0., 1.],
-                            [-1.,  0.]],
+            Direction::Up => array![[1., 0.], [0., 1.]],
+            Direction::Down => array![[-1., 0.], [0., -1.]],
+            Direction::Left => array![[0., -1.], [1., 0.]],
+            Direction::Right => array![[0., 1.], [-1., 0.]],
         }
     }
 }
@@ -185,24 +194,24 @@ impl Direction {
 #[derive(Clone)]
 pub enum Move {
     Direction(Direction),
-    Jump
+    Jump,
 }
 
-
 impl Move {
-    pub fn widget(& self, image_ids : & ImageIds) -> widget::Image {
+    pub fn widget(&self, image_ids: &ImageIds) -> widget::Image {
         match *self {
             Move::Direction(ref direction) => {
-                let unrotated_points = vec![[0.0, 0.0], [50.0,0.0], [25.0, 25.0]];
-                let mut points = vec![[0.,0.];3];
-                for (x,y) in unrotated_points.iter().zip(points.iter_mut()) {
+                let unrotated_points = vec![[0.0, 0.0], [50.0, 0.0], [25.0, 25.0]];
+                let mut points = vec![[0., 0.]; 3];
+                for (x, y) in unrotated_points.iter().zip(points.iter_mut()) {
                     //y <- a A x + b y
-                    ndarray::linalg::general_mat_vec_mul(1.,//a
-                                                         & direction.rotation(),//A
-                                                         & ArrayView::from(x),//x
-                                                         1.,//b
-                                                         & mut ArrayViewMut::from(y)//y
-                                                         );
+                    ndarray::linalg::general_mat_vec_mul(
+                        1.,                         //a
+                        &direction.rotation(),      //A
+                        &ArrayView::from(x),        //x
+                        1.,                         //b
+                        &mut ArrayViewMut::from(y), //y
+                    );
                 }
                 let triangle = match *direction {
                     Direction::Up => widget::Image::new(image_ids.move_arrows[0]),
@@ -216,25 +225,22 @@ impl Move {
                     Direction::Left => triangle.left(0.).align_middle_y(),
                     Direction::Right => triangle.right(0.).align_middle_y(),
                 }
-            },
-            Move::Jump => {
-                widget::Image::new(image_ids.jump_icon).middle()
             }
+            Move::Jump => widget::Image::new(image_ids.jump_icon).middle(),
         }
     }
 }
 
 pub struct Plan {
-    pub moves : HashMap<Id, Move>,
-    pub portals : HashSet<(usize, usize)>
+    pub moves: HashMap<Id, Move>,
+    pub portals: HashSet<(usize, usize)>,
 }
 
 impl Plan {
     pub fn new() -> Self {
         Plan {
-            moves : HashMap::new(),
-            portals : HashSet::new(),
-
+            moves: HashMap::new(),
+            portals: HashSet::new(),
         }
     }
 }
@@ -249,14 +255,18 @@ widget_ids! {
 
 #[derive(Clone)]
 pub struct Player {
-    widget_ids : Option<PlayerIds>,
-    pub id : Id,
-    pub position : Point,
+    widget_ids: Option<PlayerIds>,
+    pub id: Id,
+    pub position: Point,
 }
 
 impl Player {
-    pub fn new(position : Point) -> Self {
-        Player{widget_ids : None, id : rand::random(), position}
+    pub fn new(position: Point) -> Self {
+        Player {
+            widget_ids: None,
+            id: rand::random(),
+            position,
+        }
     }
 }
 
