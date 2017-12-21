@@ -1,6 +1,6 @@
 extern crate types;
 
-use self::types::{Constraint, Direction, GameFrame, GameState, Move, Plan, Player};
+use self::types::{Constraint, Direction, GameFrame, Move, Plan, Player};
 
 use std::collections::hash_map::Entry;
 

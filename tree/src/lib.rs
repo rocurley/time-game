@@ -49,9 +49,9 @@ impl<T, E> Zipper<T, E> {
         let right;
         {
             let mut left_tail = left.drain(i..);
-            let (edgeTemp, new_focusTemp) = left_tail.next().expect("Index out of bounds");
-            edge = edgeTemp;
-            new_focus = new_focusTemp;
+            let (edge_temp, new_focus_temp) = left_tail.next().expect("Index out of bounds");
+            edge = edge_temp;
+            new_focus = new_focus_temp;
             right = left_tail.rev().collect();
         }
         let old_focus = mem::replace(&mut self.focus, new_focus);
@@ -132,7 +132,7 @@ impl<T, E> Zipper<T, E> {
         return self.focus;
     }
     pub fn push(&mut self, x: T, edge: E) {
-        let mut left = mem::replace(&mut self.focus.children, Vec::new());
+        let left = mem::replace(&mut self.focus.children, Vec::new());
         let new_focus = RoseTree::singleton(x);
         let old_focus = mem::replace(&mut self.focus, new_focus);
         self.frames.push(ZipperFrame {
