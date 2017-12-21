@@ -51,7 +51,7 @@ pub struct GameState {
     ids: GameStateIds,
     pub history: tree::Zipper<GameFrame, Plan>,
     pub selected: Option<Selection>,
-    pub current_plan: Plan,
+    pub current_plan: CachablePlan,
 }
 
 impl GameState {
@@ -60,7 +60,7 @@ impl GameState {
             ids: GameStateIds::new(id_generator),
             history: tree::Zipper::new(tree::RoseTree::singleton(GameFrame::new())),
             selected: None,
-            current_plan: Plan::new(),
+            current_plan: CachablePlan::new(),
         }
     }
 
@@ -111,7 +111,7 @@ impl GameState {
                 .set(*id, ui_cell);
         }
 
-        for player in self.history.get_focus_val_mut().players.iter_mut() {
+        for player in self.history.focus.val.players.iter_mut() {
             //buttons[player.position] = buttons[player.position].clone().color(color::GREEN).label("Player");
             let parent_elem = grid_cells[player.position];
             let widget_ids = player
@@ -127,7 +127,11 @@ impl GameState {
                 circle = circle.clone().color(color::RED);
             }
             circle.set(widget_ids.player, ui_cell);
-            if let Some(player_move) = self.current_plan.moves.get(&player.id) {
+            if let Some(player_move) = self.current_plan
+                .get(&self.history.focus.children)
+                .moves
+                .get(&player.id)
+            {
                 player_move
                     .widget(image_ids)
                     .parent(widget_ids.player)
@@ -139,7 +143,11 @@ impl GameState {
             }
         }
         let mut portals_ids = self.ids.planned_portals.walk();
-        for &(x, y) in self.current_plan.portals.iter() {
+        for &(x, y) in self.current_plan
+            .get(&self.history.focus.children)
+            .portals
+            .iter()
+        {
             let parent_elem = grid_cells[[x, y]];
             let id = portals_ids.next(
                 &mut self.ids.planned_portals,
@@ -231,6 +239,7 @@ impl Move {
     }
 }
 
+#[derive(Clone)]
 pub struct Plan {
     pub moves: HashMap<Id, Move>,
     pub portals: HashSet<(usize, usize)>,
@@ -241,6 +250,32 @@ impl Plan {
         Plan {
             moves: HashMap::new(),
             portals: HashSet::new(),
+        }
+    }
+}
+
+pub enum CachablePlan {
+    Novel(Plan),
+    Old(usize),
+}
+
+impl CachablePlan {
+    pub fn new() -> Self {
+        CachablePlan::Novel(Plan::new())
+    }
+    pub fn get<'a, T>(&'a self, history_children: &'a Vec<(Plan, T)>) -> &'a Plan {
+        match self {
+            &CachablePlan::Novel(ref p) => &p,
+            &CachablePlan::Old(ix) => &history_children[ix].0,
+        }
+    }
+    pub fn cow<'a, T>(&'a mut self, history_children: &'a Vec<(Plan, T)>) -> &'a mut Plan {
+        if let &mut CachablePlan::Old(ix) = self {
+            *self = CachablePlan::Novel(history_children[ix].0.clone());
+        }
+        match self {
+            &mut CachablePlan::Novel(ref mut plan) => plan,
+            _ => panic!("Just set the plan to be novel"),
         }
     }
 }

@@ -6,7 +6,7 @@ extern crate image;
 extern crate types;
 
 use conrod::backend::glium::glium::{self, Surface};
-use types::{Direction, GameState, ImageIds, Move, Plan, Player, Selection};
+use types::{CachablePlan, Direction, GameState, ImageIds, Move, Plan, Player, Selection};
 use image::imageops;
 
 mod support;
@@ -106,16 +106,6 @@ fn main() {
                     },
                 ) = event
                 {
-                    match key {
-                        Key::Backspace => match game_state.history.up() {
-                            Ok(()) => {
-                                game_state.current_plan = Plan::new();
-                                game_state.selected = None;
-                            }
-                            Err(err) => println!("{}", err),
-                        },
-                        _ => {}
-                    }
                     match game_state.selected {
                         Some(Selection::Player(player_id)) => {
                             enum Update {
@@ -133,38 +123,76 @@ fn main() {
                             };
                             for update in update_option {
                                 match update {
-                                    Update::SetMove(new_move) => {
-                                        game_state.current_plan.moves.insert(player_id, new_move)
-                                    }
-                                    Update::ClearMove => {
-                                        game_state.current_plan.moves.remove(&player_id)
-                                    }
+                                    Update::SetMove(new_move) => game_state
+                                        .current_plan
+                                        .cow(&game_state.history.focus.children)
+                                        .moves
+                                        .insert(player_id, new_move),
+                                    Update::ClearMove => game_state
+                                        .current_plan
+                                        .cow(&game_state.history.focus.children)
+                                        .moves
+                                        .remove(&player_id),
                                 };
                             }
                         }
                         Some(Selection::GridCell(pt)) => {
                             if let Key::Q = key {
-                                if game_state.current_plan.portals.contains(&pt) {
-                                    game_state.current_plan.portals.remove(&pt);
+                                if game_state
+                                    .current_plan
+                                    .get(&game_state.history.focus.children)
+                                    .portals
+                                    .contains(&pt)
+                                {
+                                    game_state
+                                        .current_plan
+                                        .cow(&game_state.history.focus.children)
+                                        .portals
+                                        .remove(&pt);
                                 } else {
-                                    game_state.current_plan.portals.insert(pt);
+                                    game_state
+                                        .current_plan
+                                        .cow(&game_state.history.focus.children)
+                                        .portals
+                                        .insert(pt);
                                 }
                             }
                         }
                         None => {}
                     }
-                    if let conrod::input::Key::Return = key {
-                        match logic::apply_plan(
+                    match key {
+                        Key::Backspace => match game_state.history.up() {
+                            Ok(ix) => {
+                                game_state.current_plan = CachablePlan::Old(ix);
+                            }
+                            Err(err) => println!("{}", err),
+                        },
+                        Key::Return => match logic::apply_plan(
                             &game_state.history.get_focus_val(),
-                            &game_state.current_plan,
+                            &game_state
+                                .current_plan
+                                .get(&game_state.history.focus.children),
                         ) {
                             Err(err) => println!("{}", err),
-                            Ok(new_frame) => {
-                                let old_plan =
-                                    std::mem::replace(&mut game_state.current_plan, Plan::new());
-                                game_state.history.push(new_frame, old_plan);
-                            }
-                        }
+                            Ok(new_frame) => match game_state.current_plan {
+                                CachablePlan::Novel(ref mut plan) => {
+                                    let old_plan = std::mem::replace(plan, Plan::new());
+                                    game_state.history.push(new_frame, old_plan);
+                                }
+                                CachablePlan::Old(ix) => {
+                                    game_state
+                                        .history
+                                        .down(ix)
+                                        .expect("Cached plan wasn't there!");
+                                    game_state.current_plan =
+                                        match game_state.history.focus.children.len() {
+                                            0 => CachablePlan::new(),
+                                            l => CachablePlan::Old(l - 1),
+                                        }
+                                }
+                            },
+                        },
+                        _ => {}
                     }
                 }
             }
