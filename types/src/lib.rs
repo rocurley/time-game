@@ -39,18 +39,26 @@ pub enum Selection {
     GridCell(Point),
 }
 
+widget_ids! {
+    #[derive(Clone)]
+    struct GameStateIds {
+        grid,
+        planned_portals[],
+    }
+}
+
 pub struct GameState {
-    id : widget::Id,
-    pub current_frame : GameFrame,
+    ids : GameStateIds,
+    pub history : tree::Zipper<GameFrame, Plan>,
     pub selected : Option<Selection>,
     pub current_plan : Plan,
 }
 
 impl GameState {
-    pub fn new(id_generator : & mut widget::id::Generator) -> Self {
+    pub fn new(id_generator : widget::id::Generator) -> Self {
         GameState {
-            id : id_generator.next(),
-            current_frame : GameFrame::new(),
+            ids : GameStateIds::new(id_generator),
+            history : tree::Zipper::new(tree::RoseTree::singleton(GameFrame::new())),
             selected : None,
             current_plan : Plan::new(),
         }
@@ -64,7 +72,7 @@ impl GameState {
         let mut elements = widget::Matrix::new(COLS, ROWS)
             .w_h(ui_cell.win_w , ui_cell.win_h)
             .middle_of(ui_cell.window)
-            .set(self.id, ui_cell);
+            .set(self.ids.grid, ui_cell);
         let mut should_update = false;
         //elements.next is in column major order for some reason
         let mut elements_vec = Vec::new();
@@ -90,7 +98,7 @@ impl GameState {
             }
         });
 
-        for (& (x,y), constraint) in self.current_frame.constraints.iter_mut() {
+        for (& (x,y), constraint) in self.history.get_focus_val_mut().constraints.iter_mut() {
             let parent_elem = grid_cells[[x,y]];
             let id = constraint.id.get_or_insert(ui_cell.widget_id_generator().next());
             widget::Circle::fill(40.)
@@ -99,7 +107,7 @@ impl GameState {
                 .set(*id, ui_cell);
         }
 
-        for player in self.current_frame.players.iter_mut() {
+        for player in self.history.get_focus_val_mut().players.iter_mut() {
             //buttons[player.position] = buttons[player.position].clone().color(color::GREEN).label("Player");
             let parent_elem = grid_cells[player.position];
             let widget_ids = player.widget_ids.get_or_insert(PlayerIds::new(ui_cell.widget_id_generator()));
@@ -122,6 +130,16 @@ impl GameState {
                 self.selected = Some(Selection::Player(player.id));
                 should_update = true;
             }
+        }
+        let mut portals_ids = self.ids.planned_portals.walk();
+        for & (x,y) in self.current_plan.portals.iter() {
+            let parent_elem = grid_cells[[x,y]];
+            let id = portals_ids.next(& mut self.ids.planned_portals, & mut ui_cell.widget_id_generator());
+            let color = color::Color::Rgba(0.,0.,0.7,0.5);
+            widget::Circle::fill(40.)
+                .color(color)
+                .middle_of(parent_elem.widget_id)
+                .set(id, ui_cell);
         }
         return should_update 
     }

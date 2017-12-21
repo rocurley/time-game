@@ -1,17 +1,17 @@
 //! The MIT License (MIT)
-//! 
+//!
 //! Copyright (c) 2014 PistonDevelopers
-//! 
+//!
 //! Permission is hereby granted, free of charge, to any person obtaining a copy
 //! of this software and associated documentation files (the "Software"), to deal
 //! in the Software without restriction, including without limitation the rights
 //! to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 //! copies of the Software, and to permit persons to whom the Software is
 //! furnished to do so, subject to the following conditions:
-//! 
+//!
 //! The above copyright notice and this permission notice shall be included in all
 //! copies or substantial portions of the Software.
-//! 
+//!
 //! THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 //! IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 //! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -36,13 +36,12 @@ use std;
 
 use conrod::backend::glium::glium;
 
-
 /// A demonstration of some application state we want to control with a conrod GUI.
 
 /// In most of the examples the `glutin` crate is used for providing the window context and
 /// events while the `glium` crate is used for displaying `conrod::render::Primitives` to the
 /// screen.
-/// 
+///
 /// This `Iterator`-like type simplifies some of the boilerplate involved in setting up a
 /// glutin+glium event loop that works efficiently with conrod.
 
@@ -52,7 +51,6 @@ pub struct EventLoop {
 }
 
 impl EventLoop {
-
     pub fn new() -> Self {
         EventLoop {
             last_update: std::time::Instant::now(),
@@ -65,7 +63,10 @@ impl EventLoop {
     }
 
     /// Produce an iterator yielding all available events.
-    pub fn next(&mut self, events_loop: &mut glium::glutin::EventsLoop) -> Vec<glium::glutin::Event> {
+    pub fn next(
+        &mut self,
+        events_loop: &mut glium::glutin::EventsLoop,
+    ) -> Vec<glium::glutin::Event> {
         // We don't want to loop any faster than 60 FPS, so wait until it has been at least 16ms
         // since the last yield.
         let last_update = self.last_update;
