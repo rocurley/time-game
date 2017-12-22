@@ -9,10 +9,37 @@ extern crate rand;
 extern crate tree;
 
 use std::collections::{HashMap, HashSet};
+use std::marker::PhantomData;
 use conrod::{color, widget, Colorable, Positionable, Sizeable, Widget};
 use ndarray::{Array2, ArrayView, ArrayViewMut, ShapeBuilder, Zip};
 
-type Id = u64;
+pub struct Id<T>(u64, PhantomData<T>);
+impl<T> PartialEq for Id<T> {
+    fn eq(&self, other: &Id<T>) -> bool {
+        self.0 == other.0
+    }
+}
+impl<T> Eq for Id<T> {}
+
+impl<T> std::hash::Hash for Id<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
+}
+
+impl<T> Clone for Id<T> {
+    fn clone(&self) -> Self {
+        Id(self.0, PhantomData)
+    }
+}
+
+impl<T> Copy for Id<T> {}
+
+impl<T> rand::Rand for Id<T> {
+    fn rand<R: rand::Rng>(rng: &mut R) -> Self {
+        Id(rand::Rand::rand(rng), PhantomData)
+    }
+}
 
 pub struct ImageIds {
     pub jump_icon: conrod::image::Id,
@@ -35,7 +62,7 @@ impl GameFrame {
 
 #[derive(PartialEq, Eq)]
 pub enum Selection {
-    Player(Id),
+    Player(Id<Player>),
     GridCell(Point),
 }
 
@@ -254,7 +281,7 @@ impl Move {
 
 #[derive(Clone)]
 pub struct Plan {
-    pub moves: HashMap<Id, Move>,
+    pub moves: HashMap<Id<Player>, Move>,
     pub portals: HashSet<(usize, usize)>,
 }
 
@@ -304,7 +331,7 @@ widget_ids! {
 #[derive(Clone)]
 pub struct Player {
     widget_ids: Option<PlayerIds>,
-    pub id: Id,
+    pub id: Id<Player>,
     pub position: Point,
 }
 
@@ -319,3 +346,27 @@ impl Player {
 }
 
 type Point = (usize, usize);
+
+// Inventory system
+//
+// We don't just want a flat pile of items: We want to be able to look them up quickly.
+//
+// We don't want a trait object (probably?) because we want to be able to recover the original
+// item. It's imaginable that we could have a trait that is good for everything (Maia say: have a
+// "use' method, which isn't at all out of the question given that it's a game).
+//
+// A huge struct (one per item type) seems clunky, but might work.
+//
+// Do your items have structure? If not, you could just have a map from an Item sum type to a
+// count. That's probably good enough for Minecraft's inventory system, for example.
+//
+// Hell, minecraft's system could be done with an array.
+//
+// I've been assuming that lookup is important, but what if it isn't? Maybe a Vec or array is the
+// way to go here. It does make consolidating items into stacks harder.
+//
+// What would an ECS do? Dumb entities with smart components. How do you select all the entities
+// with a given set of components?
+//
+// Hell, maybe "use()" is the way to go. Select something from your inventory, click on something
+// else. This calls use() with what you clicked as an argument?
