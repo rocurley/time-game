@@ -1,18 +1,22 @@
-#![feature(i128_type)]
-
-#[macro_use]
-extern crate conrod;
-extern crate glium;
-#[macro_use(array)]
-extern crate ndarray;
+extern crate ggez;
+extern crate nalgebra;
 extern crate rand;
 extern crate tree;
 
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
-use conrod::{color, widget, Colorable, Positionable, Sizeable, Widget};
-use ndarray::{Array2, ArrayView, ArrayViewMut, ShapeBuilder, Zip};
+use ggez::{event, graphics};
+use ggez::graphics::Point2;
+use graphics::Drawable;
 
+use nalgebra::{Similarity2, Vector2};
+
+const SCALE: f32 = 100.;
+
+//Why `Id<T>`s instead of some sort of reference? The fundamental problem, I think, is that a given
+//`Id<Player>` referes to multiple different `Player`s, since each `GameFrame` has a different
+//`Player` with the same `Id<Player>`. Were it not for this, I think an `Rc<Cell<Player>>` or
+//something would work.
 pub struct Id<T>(u64, PhantomData<T>);
 impl<T> PartialEq for Id<T> {
     fn eq(&self, other: &Id<T>) -> bool {
@@ -41,14 +45,9 @@ impl<T> rand::Rand for Id<T> {
     }
 }
 
-pub struct ImageIds {
-    pub jump_icon: conrod::image::Id,
-    pub move_arrows: [conrod::image::Id; 4],
-}
-
 pub struct GameFrame {
     pub players: Vec<Player>,
-    pub constraints: HashMap<(usize, usize), Constraint>,
+    pub constraints: HashMap<Point, Constraint>,
 }
 
 impl GameFrame {
@@ -66,29 +65,35 @@ pub enum Selection {
     GridCell(Point),
 }
 
-widget_ids! {
-    #[derive(Clone)]
-    struct GameStateIds {
-        grid,
-        planned_portals[],
-    }
-}
-
 pub struct GameState {
-    ids: GameStateIds,
     pub history: tree::Zipper<GameFrame, Plan>,
     pub selected: Option<Selection>,
     pub current_plan: CachablePlan,
+    pub image_map: ImageMap,
+}
+
+pub struct ImageMap {
+    pub player: graphics::Image,
+    pub selection: graphics::Image,
+}
+
+impl ImageMap {
+    pub fn new(ctx: &mut ggez::Context) -> ggez::GameResult<Self> {
+        let player = graphics::Image::new(ctx, "/images/player.png")?;
+        let selection = graphics::Image::new(ctx, "/images/selection.png")?;
+        Ok(ImageMap { player, selection })
+    }
 }
 
 impl GameState {
-    pub fn new(id_generator: widget::id::Generator) -> Self {
-        GameState {
-            ids: GameStateIds::new(id_generator),
+    pub fn new(ctx: &mut ggez::Context) -> ggez::GameResult<Self> {
+        let image_map = ImageMap::new(ctx)?;
+        Ok(GameState {
             history: tree::Zipper::new(tree::RoseTree::singleton(GameFrame::new())),
             selected: None,
             current_plan: CachablePlan::new(),
-        }
+            image_map,
+        })
     }
 
     pub fn rotate_plan(&mut self) -> Result<(), &str> {
@@ -104,6 +109,7 @@ impl GameState {
         }
     }
 
+    /*
     pub fn render(&mut self, ui_cell: &mut conrod::UiCell, image_ids: &ImageIds) -> bool {
         const COLS: usize = 6;
         const ROWS: usize = 6;
@@ -201,11 +207,89 @@ impl GameState {
         }
         return should_update;
     }
+    */
+}
+
+fn draw_grid(ctx: &mut ggez::Context) -> ggez::GameResult<()> {
+    let graphics::Rect { x: x0, y: y0, w, h } = graphics::get_screen_coordinates(ctx);
+    let mut x = x0;
+    let mut y = y0;
+    while x <= x0 + w {
+        graphics::line(ctx, &[Point2::new(x, y0), Point2::new(x, y0 + h)], 5.)?;
+        x += SCALE;
+    }
+    while y <= y0 + h {
+        graphics::line(ctx, &[Point2::new(x0, y), Point2::new(x0 + w, y)], 5.)?;
+        y += SCALE;
+    }
+    Ok(())
+}
+
+impl event::EventHandler for GameState {
+    fn update(&mut self, _ctx: &mut ggez::Context) -> ggez::GameResult<()> {
+        Ok(())
+    }
+
+    fn mouse_button_down_event(
+        &mut self,
+        ctx: &mut ggez::Context,
+        button: event::MouseButton,
+        x: i32,
+        y: i32,
+    ) {
+        let graphics::Rect { x: x0, y: y0, .. } = graphics::get_screen_coordinates(ctx);
+        let inv_transform: Similarity2<f32> =
+            Similarity2::new(Vector2::new(x0, y0), 0., SCALE).inverse();
+        let world_space_pt: Point = nalgebra::try_convert::<Point2, nalgebra::Point2<i32>>(
+            inv_transform * Point2::new(x as f32, y as f32),
+        ).unwrap();
+        match button {
+            event::MouseButton::Left => {
+                for player in self.history.get_focus_val().players.iter() {
+                    if player.position == world_space_pt {
+                        self.selected = Some(Selection::Player(player.id));
+                        return;
+                    }
+                }
+                self.selected = Some(Selection::GridCell(world_space_pt));
+            }
+            _ => {}
+        }
+    }
+
+    fn draw(&mut self, ctx: &mut ggez::Context) -> ggez::GameResult<()> {
+        let graphics::Rect { x: x0, y: y0, .. } = graphics::get_screen_coordinates(ctx);
+        let transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
+        graphics::clear(ctx);
+        draw_grid(ctx)?;
+        for player in self.history.get_focus_val().players.iter() {
+            self.image_map.player.draw(
+                ctx,
+                transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
+                0.,
+            )?;
+            if Some(Selection::Player(player.id)) == self.selected {
+                self.image_map.selection.draw(
+                    ctx,
+                    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
+                    0.,
+                )?;
+            }
+        }
+        if let Some(Selection::GridCell(pt)) = self.selected {
+            self.image_map.selection.draw(
+                ctx,
+                transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt),
+                0.,
+            )?;
+        }
+        graphics::present(ctx);
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
 pub struct Constraint {
-    id: Option<widget::Id>,
     pub timestamp: usize,
     pub player_position: Point,
 }
@@ -213,7 +297,6 @@ pub struct Constraint {
 impl Constraint {
     pub fn new(timestamp: usize, player_position: Point) -> Self {
         Constraint {
-            id: None,
             timestamp,
             player_position,
         }
@@ -229,6 +312,7 @@ pub enum Direction {
 }
 
 impl Direction {
+    /*
     fn rotation(&self) -> Array2<f64> {
         match *self {
             Direction::Up => array![[1., 0.], [0., 1.]],
@@ -237,6 +321,7 @@ impl Direction {
             Direction::Right => array![[0., 1.], [-1., 0.]],
         }
     }
+    */
 }
 
 #[derive(Clone)]
@@ -246,6 +331,7 @@ pub enum Move {
 }
 
 impl Move {
+    /*
     pub fn widget(&self, image_ids: &ImageIds) -> widget::Image {
         match *self {
             Move::Direction(ref direction) => {
@@ -277,12 +363,13 @@ impl Move {
             Move::Jump => widget::Image::new(image_ids.jump_icon).middle(),
         }
     }
+    */
 }
 
 #[derive(Clone)]
 pub struct Plan {
     pub moves: HashMap<Id<Player>, Move>,
-    pub portals: HashSet<(usize, usize)>,
+    pub portals: HashSet<Point>,
 }
 
 impl Plan {
@@ -320,17 +407,8 @@ impl CachablePlan {
     }
 }
 
-widget_ids! {
-    #[derive(Clone)]
-    struct PlayerIds {
-        player,
-        planned_move,
-    }
-}
-
 #[derive(Clone)]
 pub struct Player {
-    widget_ids: Option<PlayerIds>,
     pub id: Id<Player>,
     pub position: Point,
 }
@@ -338,14 +416,13 @@ pub struct Player {
 impl Player {
     pub fn new(position: Point) -> Self {
         Player {
-            widget_ids: None,
             id: rand::random(),
             position,
         }
     }
 }
 
-type Point = (usize, usize);
+type Point = nalgebra::Point2<i32>;
 
 // Inventory system
 //

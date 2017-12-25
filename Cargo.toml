@@ -7,8 +7,4 @@ authors = ["Roger Curley <rocurley@gmail.com>"]
 tree = { path = "tree" }
 types = { path = "types" }
 
-conrod = { version = "0.56.0", features = ["glium", "winit"]}
-ndarray = "0.10.12"
-glium = "0.18"
-winit = "0.7"
-image = "0.15.0"
+ggez = "0.4.0-rc.2"

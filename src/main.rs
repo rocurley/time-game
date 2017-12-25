@@ -1,17 +1,47 @@
-//! A simple example that demonstrates using conrod within a basic `winit` window loop, using
-//! `glium` to render the `conrod::render::Primitives` to screen.
-
-extern crate conrod;
-extern crate image;
 extern crate types;
 
-use conrod::backend::glium::glium::{self, Surface};
-use types::{CachablePlan, Direction, GameState, ImageIds, Move, Plan, Player, Selection};
-use image::imageops;
+//use types::{CachablePlan, Direction, GameState, Move, Plan, Player, Selection};
+use types::{GameState, Player};
 
-mod support;
-mod logic;
+//mod support;
+//mod logic;
 
+extern crate ggez;
+use ggez::*;
+use nalgebra::Point2;
+
+use std::{env, path};
+
+pub fn main() {
+    let mut cb = ContextBuilder::new("time game", "Roger")
+        .window_setup(conf::WindowSetup::default().title("Time Game"))
+        .window_mode(conf::WindowMode::default().dimensions(1000, 1000));
+
+    // We add the CARGO_MANIFEST_DIR/resources to the filesystems paths so
+    // we we look in the cargo project for files.
+    if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+        let mut path = path::PathBuf::from(manifest_dir);
+        path.push("assets");
+        println!("Adding path {:?}", path);
+        // We need this re-assignment alas, see
+        // https://aturon.github.io/ownership/builders.html
+        // under "Consuming builders"
+        cb = cb.add_resource_path(path);
+    } else {
+        println!("Not building from cargo?  Ok.");
+    }
+
+    //let ctx = &mut Context::load_from_conf("astroblasto", "ggez", c).unwrap();
+    let ctx = &mut cb.build().unwrap();
+    let game_state = &mut GameState::new(ctx).unwrap();
+    game_state
+        .history
+        .get_focus_val_mut()
+        .players
+        .push(Player::new(Point2::new(0, 4)));
+    event::run(ctx, game_state).unwrap();
+}
+/*
 fn main() {
     const WIDTH: u32 = 600;
     const HEIGHT: u32 = 600;
@@ -214,29 +244,4 @@ fn main() {
         };
     }
 }
-
-fn load_image<P>(
-    display: &glium::Display,
-    path: P,
-    angle: Option<Direction>,
-) -> glium::texture::SrgbTexture2d
-where
-    P: AsRef<std::path::Path>,
-{
-    let path = path.as_ref();
-    let mut rgba_image = image::open(&std::path::Path::new(&path)).unwrap().to_rgba();
-    rgba_image = match angle {
-        None => rgba_image,
-        Some(Direction::Up) => rgba_image,
-        Some(Direction::Right) => imageops::rotate90(&rgba_image),
-        Some(Direction::Down) => imageops::rotate180(&rgba_image),
-        Some(Direction::Left) => imageops::rotate270(&rgba_image),
-    };
-    let image_dimensions = rgba_image.dimensions();
-    let raw_image = glium::texture::RawImage2d::from_raw_rgba_reversed(
-        &rgba_image.into_raw(),
-        image_dimensions,
-    );
-    let texture = glium::texture::SrgbTexture2d::new(display, raw_image).unwrap();
-    texture
-}
+*/
