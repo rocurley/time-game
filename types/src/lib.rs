@@ -66,6 +66,7 @@ pub struct ImageMap {
     pub selection: graphics::Image,
     pub move_arrow: graphics::Image,
     pub jump_icon: graphics::Image,
+    pub portal: graphics::Image,
 }
 
 impl ImageMap {
@@ -74,11 +75,13 @@ impl ImageMap {
         let selection = graphics::Image::new(ctx, "/images/selection.png")?;
         let move_arrow = graphics::Image::new(ctx, "/images/arrow.png")?;
         let jump_icon = graphics::Image::new(ctx, "/images/jump.png")?;
+        let portal = graphics::Image::new(ctx, "/images/portal.png")?;
         Ok(ImageMap {
             player,
             selection,
             move_arrow,
             jump_icon,
+            portal,
         })
     }
 }

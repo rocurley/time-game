@@ -327,6 +327,20 @@ impl event::EventHandler for GameState {
                     },
                 )?;
             }
+            for pt in self.history.get_focus_val().constraints.keys() {
+                self.image_map.portal.draw(
+                    ctx,
+                    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(*pt),
+                    0.,
+                )?;
+            }
+            for pt in &self.current_plan.get(&self.history.focus.children).portals {
+                self.image_map.jump_icon.draw(
+                    ctx,
+                    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(*pt),
+                    0.,
+                )?;
+            }
             if Some(Selection::Player(player.id)) == self.selected {
                 self.image_map.selection.draw(
                     ctx,
