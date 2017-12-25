@@ -4,12 +4,8 @@ extern crate rand;
 extern crate tree;
 
 use std::collections::{HashMap, HashSet};
-use ggez::{event, graphics};
-use ggez::graphics::Point2;
-use graphics::Drawable;
+use ggez::graphics;
 use std::marker::PhantomData;
-
-use nalgebra::{Similarity2, Vector2};
 
 pub const SCALE: f32 = 100.;
 
@@ -68,13 +64,22 @@ pub enum Selection {
 pub struct ImageMap {
     pub player: graphics::Image,
     pub selection: graphics::Image,
+    pub move_arrow: graphics::Image,
+    pub jump_icon: graphics::Image,
 }
 
 impl ImageMap {
     pub fn new(ctx: &mut ggez::Context) -> ggez::GameResult<Self> {
         let player = graphics::Image::new(ctx, "/images/player.png")?;
         let selection = graphics::Image::new(ctx, "/images/selection.png")?;
-        Ok(ImageMap { player, selection })
+        let move_arrow = graphics::Image::new(ctx, "/images/arrow.png")?;
+        let jump_icon = graphics::Image::new(ctx, "/images/jump.png")?;
+        Ok(ImageMap {
+            player,
+            selection,
+            move_arrow,
+            jump_icon,
+        })
     }
 }
 

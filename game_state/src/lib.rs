@@ -8,6 +8,8 @@ use ggez::{event, graphics};
 use ggez::graphics::Point2;
 use graphics::Drawable;
 
+use std::f32::consts::PI;
+
 use nalgebra::{Similarity2, Vector2};
 
 use types::*;
@@ -295,6 +297,36 @@ impl event::EventHandler for GameState {
                 transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
                 0.,
             )?;
+            for mv in self.current_plan
+                .get(&self.history.focus.children)
+                .moves
+                .get(&player.id)
+            {
+                let (image, rotation) = match mv {
+                    &Move::Direction(ref dir) => {
+                        let angle = match dir {
+                            &Direction::Up => 0.,
+                            &Direction::Left => 1.5 * PI,
+                            &Direction::Down => PI,
+                            &Direction::Right => 0.5 * PI,
+                        };
+                        (&self.image_map.move_arrow, angle)
+                    }
+                    &Move::Jump => (&self.image_map.jump_icon, 0.),
+                };
+                let dest = transform
+                    * (nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position)
+                        + Vector2::new(0.5, 0.5));
+                image.draw_ex(
+                    ctx,
+                    graphics::DrawParam {
+                        dest,
+                        offset: Point2::new(0.5, 0.5),
+                        rotation,
+                        ..Default::default()
+                    },
+                )?;
+            }
             if Some(Selection::Player(player.id)) == self.selected {
                 self.image_map.selection.draw(
                     ctx,
