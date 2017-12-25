@@ -1,7 +1,9 @@
+extern crate game_state;
 extern crate types;
 
 //use types::{CachablePlan, Direction, GameState, Move, Plan, Player, Selection};
-use types::{GameState, Player};
+use types::Player;
+use game_state::GameState;
 
 //mod support;
 //mod logic;

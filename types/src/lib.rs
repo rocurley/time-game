@@ -4,14 +4,14 @@ extern crate rand;
 extern crate tree;
 
 use std::collections::{HashMap, HashSet};
-use std::marker::PhantomData;
 use ggez::{event, graphics};
 use ggez::graphics::Point2;
 use graphics::Drawable;
+use std::marker::PhantomData;
 
 use nalgebra::{Similarity2, Vector2};
 
-const SCALE: f32 = 100.;
+pub const SCALE: f32 = 100.;
 
 //Why `Id<T>`s instead of some sort of reference? The fundamental problem, I think, is that a given
 //`Id<Player>` referes to multiple different `Player`s, since each `GameFrame` has a different
@@ -65,13 +65,6 @@ pub enum Selection {
     GridCell(Point),
 }
 
-pub struct GameState {
-    pub history: tree::Zipper<GameFrame, Plan>,
-    pub selected: Option<Selection>,
-    pub current_plan: CachablePlan,
-    pub image_map: ImageMap,
-}
-
 pub struct ImageMap {
     pub player: graphics::Image,
     pub selection: graphics::Image,
@@ -82,209 +75,6 @@ impl ImageMap {
         let player = graphics::Image::new(ctx, "/images/player.png")?;
         let selection = graphics::Image::new(ctx, "/images/selection.png")?;
         Ok(ImageMap { player, selection })
-    }
-}
-
-impl GameState {
-    pub fn new(ctx: &mut ggez::Context) -> ggez::GameResult<Self> {
-        let image_map = ImageMap::new(ctx)?;
-        Ok(GameState {
-            history: tree::Zipper::new(tree::RoseTree::singleton(GameFrame::new())),
-            selected: None,
-            current_plan: CachablePlan::new(),
-            image_map,
-        })
-    }
-
-    pub fn rotate_plan(&mut self) -> Result<(), &str> {
-        match self.history.focus.children.len() {
-            0 => Err("No future recorded: can't cycle plans"),
-            l => {
-                self.current_plan = match self.current_plan {
-                    CachablePlan::Old(i) => CachablePlan::Old(i.checked_sub(1).unwrap_or(l - 1)),
-                    CachablePlan::Novel(_) => CachablePlan::Old(l - 1),
-                };
-                Ok(())
-            }
-        }
-    }
-
-    /*
-    pub fn render(&mut self, ui_cell: &mut conrod::UiCell, image_ids: &ImageIds) -> bool {
-        const COLS: usize = 6;
-        const ROWS: usize = 6;
-        let mut elements = widget::Matrix::new(COLS, ROWS)
-            .w_h(ui_cell.win_w, ui_cell.win_h)
-            .middle_of(ui_cell.window)
-            .set(self.ids.grid, ui_cell);
-        let mut should_update = false;
-        //elements.next is in column major order for some reason
-        let mut elements_vec = Vec::new();
-        while let Some(elem) = elements.next(ui_cell) {
-            elements_vec.push(elem);
-        }
-        let mut grid_cells =
-            ndarray::Array2::from_shape_vec((ROWS, COLS).f(), elements_vec).unwrap();
-        let mut buttons = Array2::from_shape_fn(
-            grid_cells.raw_dim(),
-            |_| widget::Button::new(), //.color(color::TRANSPARENT)
-        );
-        if let Some(Selection::GridCell((r, c))) = self.selected {
-            //let luminance = n as f32 / (COLS * ROWS) as f32;
-            //let button = widget::Button::new().color(color::BLUE.with_luminance(luminance));
-            buttons[(r, c)].style.color = Some(color::RED);
-        }
-
-        Zip::indexed(&mut grid_cells)
-            .and(&mut buttons)
-            .apply(|(r, c), elem, button| {
-                assert_eq!((r, c), (elem.row, elem.col));
-                for _click in elem.set(button.clone(), ui_cell) {
-                    self.selected = Some(Selection::GridCell((r, c)));
-                    should_update = true;
-                    //println!("Hey! {:?}", (r, c));
-                }
-            });
-
-        for (&(x, y), constraint) in self.history.get_focus_val_mut().constraints.iter_mut() {
-            let parent_elem = grid_cells[[x, y]];
-            let id = constraint
-                .id
-                .get_or_insert(ui_cell.widget_id_generator().next());
-            widget::Circle::fill(40.)
-                .color(color::BLUE)
-                .middle_of(parent_elem.widget_id)
-                .set(*id, ui_cell);
-        }
-
-        for player in self.history.focus.val.players.iter_mut() {
-            //buttons[player.position] = buttons[player.position].clone().color(color::GREEN).label("Player");
-            let parent_elem = grid_cells[player.position];
-            let widget_ids = player
-                .widget_ids
-                .get_or_insert(PlayerIds::new(ui_cell.widget_id_generator()));
-            let mut circle = widget::Circle::fill(30.0)
-                .color(color::GREEN)
-                //.label("Player")
-                //.parent(parent_elem.widget_id)
-                //.middle();
-                .middle_of(parent_elem.widget_id);
-            if Some(Selection::Player(player.id)) == self.selected {
-                circle = circle.clone().color(color::RED);
-            }
-            circle.set(widget_ids.player, ui_cell);
-            if let Some(player_move) = self.current_plan
-                .get(&self.history.focus.children)
-                .moves
-                .get(&player.id)
-            {
-                player_move
-                    .widget(image_ids)
-                    .parent(widget_ids.player)
-                    .set(widget_ids.planned_move, ui_cell)
-            }
-            for _click in ui_cell.widget_input(widget_ids.player).clicks() {
-                self.selected = Some(Selection::Player(player.id));
-                should_update = true;
-            }
-        }
-        let mut portals_ids = self.ids.planned_portals.walk();
-        for &(x, y) in self.current_plan
-            .get(&self.history.focus.children)
-            .portals
-            .iter()
-        {
-            let parent_elem = grid_cells[[x, y]];
-            let id = portals_ids.next(
-                &mut self.ids.planned_portals,
-                &mut ui_cell.widget_id_generator(),
-            );
-            let color = color::Color::Rgba(0., 0., 0.7, 0.5);
-            widget::Circle::fill(40.)
-                .color(color)
-                .middle_of(parent_elem.widget_id)
-                .set(id, ui_cell);
-        }
-        return should_update;
-    }
-    */
-}
-
-fn draw_grid(ctx: &mut ggez::Context) -> ggez::GameResult<()> {
-    let graphics::Rect { x: x0, y: y0, w, h } = graphics::get_screen_coordinates(ctx);
-    let mut x = x0;
-    let mut y = y0;
-    while x <= x0 + w {
-        graphics::line(ctx, &[Point2::new(x, y0), Point2::new(x, y0 + h)], 5.)?;
-        x += SCALE;
-    }
-    while y <= y0 + h {
-        graphics::line(ctx, &[Point2::new(x0, y), Point2::new(x0 + w, y)], 5.)?;
-        y += SCALE;
-    }
-    Ok(())
-}
-
-impl event::EventHandler for GameState {
-    fn update(&mut self, _ctx: &mut ggez::Context) -> ggez::GameResult<()> {
-        Ok(())
-    }
-
-    fn mouse_button_down_event(
-        &mut self,
-        ctx: &mut ggez::Context,
-        button: event::MouseButton,
-        x: i32,
-        y: i32,
-    ) {
-        let graphics::Rect { x: x0, y: y0, .. } = graphics::get_screen_coordinates(ctx);
-        let inv_transform: Similarity2<f32> =
-            Similarity2::new(Vector2::new(x0, y0), 0., SCALE).inverse();
-        let world_space_pt: Point = nalgebra::try_convert::<Point2, nalgebra::Point2<i32>>(
-            inv_transform * Point2::new(x as f32, y as f32),
-        ).unwrap();
-        match button {
-            event::MouseButton::Left => {
-                for player in self.history.get_focus_val().players.iter() {
-                    if player.position == world_space_pt {
-                        self.selected = Some(Selection::Player(player.id));
-                        return;
-                    }
-                }
-                self.selected = Some(Selection::GridCell(world_space_pt));
-            }
-            _ => {}
-        }
-    }
-
-    fn draw(&mut self, ctx: &mut ggez::Context) -> ggez::GameResult<()> {
-        let graphics::Rect { x: x0, y: y0, .. } = graphics::get_screen_coordinates(ctx);
-        let transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
-        graphics::clear(ctx);
-        draw_grid(ctx)?;
-        for player in self.history.get_focus_val().players.iter() {
-            self.image_map.player.draw(
-                ctx,
-                transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
-                0.,
-            )?;
-            if Some(Selection::Player(player.id)) == self.selected {
-                self.image_map.selection.draw(
-                    ctx,
-                    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
-                    0.,
-                )?;
-            }
-        }
-        if let Some(Selection::GridCell(pt)) = self.selected {
-            self.image_map.selection.draw(
-                ctx,
-                transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt),
-                0.,
-            )?;
-        }
-        graphics::present(ctx);
-        Ok(())
     }
 }
 
@@ -422,7 +212,7 @@ impl Player {
     }
 }
 
-type Point = nalgebra::Point2<i32>;
+pub type Point = nalgebra::Point2<i32>;
 
 // Inventory system
 //
