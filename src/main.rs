@@ -1,8 +1,7 @@
 extern crate game_state;
 extern crate types;
 
-//use types::{CachablePlan, Direction, GameState, Move, Plan, Player, Selection};
-use types::Player;
+use types::{Player, PortalGraphNode};
 use game_state::GameState;
 
 //mod support;
@@ -33,10 +32,19 @@ pub fn main() {
 
     let ctx = &mut cb.build().unwrap();
     let game_state = &mut GameState::new(ctx).unwrap();
-    game_state
-        .history
-        .get_focus_val_mut()
-        .players
-        .push(Player::new(Point2::new(0, 4)));
+    {
+        let game_frame = game_state.history.get_focus_val_mut();
+        let player = Player::new(Point2::new(0, 4));
+        let player_id = player.id;
+        game_frame.players.push(player);
+        game_frame
+            .portal_graph
+            .insert_node(PortalGraphNode::Beginning, Vec::new(), Vec::new());
+        game_frame.portal_graph.insert_node(
+            PortalGraphNode::End,
+            vec![(PortalGraphNode::Beginning, player_id)],
+            Vec::new(),
+        );
+    }
     event::run(ctx, game_state).unwrap();
 }

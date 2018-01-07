@@ -227,7 +227,7 @@ impl event::EventHandler for GameState {
                     },
                 )?;
             }
-            for pt in self.history.get_focus_val().constraints.keys() {
+            for pt in self.history.get_focus_val().portals.keys() {
                 self.image_map.portal.draw(
                     ctx,
                     transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(*pt),

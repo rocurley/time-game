@@ -1,4 +1,5 @@
 extern crate ggez;
+extern crate graph;
 extern crate nalgebra;
 extern crate rand;
 extern crate tree;
@@ -6,6 +7,7 @@ extern crate tree;
 use std::collections::{HashMap, HashSet};
 use ggez::graphics;
 use std::marker::PhantomData;
+use graph::Graph;
 
 pub const SCALE: f32 = 100.;
 
@@ -41,16 +43,27 @@ impl<T> rand::Rand for Id<T> {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub enum PortalGraphNode {
+    Beginning,
+    Portal(Id<Portal>),
+    End,
+}
+
+type PortalGraph = Graph<PortalGraphNode, Id<Player>>;
+
 pub struct GameFrame {
     pub players: Vec<Player>,
-    pub constraints: HashMap<Point, Constraint>,
+    pub portals: HashMap<Point, Portal>,
+    pub portal_graph: PortalGraph,
 }
 
 impl GameFrame {
     pub fn new() -> Self {
         GameFrame {
             players: Vec::new(),
-            constraints: HashMap::new(),
+            portals: HashMap::new(),
+            portal_graph: Graph::new(),
         }
     }
 }
@@ -87,15 +100,17 @@ impl ImageMap {
 }
 
 #[derive(Clone)]
-pub struct Constraint {
+pub struct Portal {
     pub timestamp: usize,
+    pub id: Id<Portal>,
     pub player_position: Point,
 }
 
-impl Constraint {
+impl Portal {
     pub fn new(timestamp: usize, player_position: Point) -> Self {
-        Constraint {
+        Portal {
             timestamp,
+            id: rand::random(),
             player_position,
         }
     }

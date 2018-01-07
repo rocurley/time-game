@@ -3,10 +3,11 @@ extern crate types;
 extern crate nalgebra;
 
 use std::collections::hash_map::Entry;
-use self::types::{Constraint, Direction, GameFrame, Move, Plan, Player};
+use self::types::{Direction, GameFrame, Move, Plan, Player, Portal, PortalGraphNode};
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
-    let mut constraints = initial_frame.constraints.clone();
+    let mut portals = initial_frame.portals.clone();
+    let mut portal_graph = initial_frame.portal_graph.clone();
     let mut players = initial_frame
         .players
         .iter()
@@ -24,9 +25,19 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 Some(Ok(player))
             }
             Some(&Move::Jump) => {
-                if let Entry::Occupied(constraint) = constraints.entry(old_player.position) {
-                    constraint.remove_entry();
-                    None
+                if let Entry::Occupied(portal_entry) = portals.entry(old_player.position) {
+                    let (_, portal) = portal_entry.remove_entry();
+                    portal_graph
+                        .edges
+                        .insert(old_player.id, PortalGraphNode::Portal(portal.id));
+                    if portal_graph
+                        .get_node(PortalGraphNode::Portal(portal.id))
+                        .connected_to(PortalGraphNode::End)
+                    {
+                        None
+                    } else {
+                        Some(Err("Created infinite loop"))
+                    }
                 } else {
                     Some(Err("Tried to close loop at wrong positon"))
                 }
@@ -34,14 +45,24 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
         })
         .collect::<Result<Vec<Player>, &str>>()?;
     for pos in plan.portals.iter() {
-        players.push(Player::new(*pos));
-        match constraints.entry(*pos) {
+        let player = Player::new(*pos);
+        let player_id = player.id;
+        players.push(player);
+        match portals.entry(*pos) {
             Entry::Occupied(_) => return Err("Overlapping portals prohibited."),
-            Entry::Vacant(vacant_entry) => vacant_entry.insert(Constraint::new(0, *pos)),
+            Entry::Vacant(vacant_entry) => {
+                let portal_id = vacant_entry.insert(Portal::new(0, *pos)).id;
+                portal_graph.insert_node(
+                    PortalGraphNode::Portal(portal_id),
+                    Vec::new(),
+                    vec![(PortalGraphNode::End, player_id)],
+                );
+            }
         };
     }
     Ok(GameFrame {
         players,
-        constraints,
+        portals,
+        portal_graph,
     })
 }
