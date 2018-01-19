@@ -98,6 +98,7 @@ pub struct ImageMap {
     pub move_arrow: graphics::Image,
     pub jump_icon: graphics::Image,
     pub portal: graphics::Image,
+    pub key: graphics::Image,
 }
 
 impl ImageMap {
@@ -107,12 +108,14 @@ impl ImageMap {
         let move_arrow = graphics::Image::new(ctx, "/images/arrow.png")?;
         let jump_icon = graphics::Image::new(ctx, "/images/jump.png")?;
         let portal = graphics::Image::new(ctx, "/images/portal.png")?;
+        let key = graphics::Image::new(ctx, "/images/key.png")?;
         Ok(ImageMap {
             player,
             selection,
             move_arrow,
             jump_icon,
             portal,
+            key,
         })
     }
 }
@@ -218,6 +221,26 @@ impl Player {
 }
 
 pub type Point = nalgebra::Point2<i32>;
+
+pub enum Item {
+    Key(Key),
+}
+
+impl Item {
+    pub fn image(&self, image_map: ImageMap) -> graphics::Image {
+        match self {
+            &Item::Key(ref key) => key.image(image_map),
+        }
+    }
+}
+
+pub struct Key {}
+
+impl Key {
+    pub fn image(&self, image_map: ImageMap) -> graphics::Image {
+        image_map.key
+    }
+}
 
 // Inventory system
 //
