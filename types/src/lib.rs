@@ -52,17 +52,35 @@ pub enum PortalGraphNode {
 
 type PortalGraph = Graph<PortalGraphNode, Id<Player>>;
 
+pub struct GameCell {
+    pub player: Option<Id<Player>>,
+    pub portal: Option<Id<Portal>>,
+}
+
+impl GameCell {
+    pub fn new() -> Self {
+        GameCell {
+            player: None,
+            portal: None,
+        }
+    }
+}
+
+type IdMap<T> = HashMap<Id<T>, T>;
+
 pub struct GameFrame {
-    pub players: Vec<Player>,
-    pub portals: HashMap<Point, Portal>,
+    pub players: IdMap<Player>,
+    pub portals: IdMap<Portal>,
+    pub map: HashMap<Point, GameCell>,
     pub portal_graph: PortalGraph,
 }
 
 impl GameFrame {
     pub fn new() -> Self {
         GameFrame {
-            players: Vec::new(),
+            players: HashMap::new(),
             portals: HashMap::new(),
+            map: HashMap::new(),
             portal_graph: Graph::new(),
         }
     }
@@ -141,42 +159,6 @@ impl Direction {
 pub enum Move {
     Direction(Direction),
     Jump,
-}
-
-impl Move {
-    /*
-    pub fn widget(&self, image_ids: &ImageIds) -> widget::Image {
-        match *self {
-            Move::Direction(ref direction) => {
-                let unrotated_points = vec![[0.0, 0.0], [50.0, 0.0], [25.0, 25.0]];
-                let mut points = vec![[0., 0.]; 3];
-                for (x, y) in unrotated_points.iter().zip(points.iter_mut()) {
-                    //y <- a A x + b y
-                    ndarray::linalg::general_mat_vec_mul(
-                        1.,                         //a
-                        &direction.rotation(),      //A
-                        &ArrayView::from(x),        //x
-                        1.,                         //b
-                        &mut ArrayViewMut::from(y), //y
-                    );
-                }
-                let triangle = match *direction {
-                    Direction::Up => widget::Image::new(image_ids.move_arrows[0]),
-                    Direction::Left => widget::Image::new(image_ids.move_arrows[1]),
-                    Direction::Down => widget::Image::new(image_ids.move_arrows[2]),
-                    Direction::Right => widget::Image::new(image_ids.move_arrows[3]),
-                };
-                match *direction {
-                    Direction::Up => triangle.up(0.).align_middle_x(),
-                    Direction::Down => triangle.down(0.).align_middle_x(),
-                    Direction::Left => triangle.left(0.).align_middle_y(),
-                    Direction::Right => triangle.right(0.).align_middle_y(),
-                }
-            }
-            Move::Jump => widget::Image::new(image_ids.jump_icon).middle(),
-        }
-    }
-    */
 }
 
 #[derive(Clone)]

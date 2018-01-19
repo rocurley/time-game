@@ -83,13 +83,16 @@ impl event::EventHandler for GameState {
         ).unwrap();
         match button {
             event::MouseButton::Left => {
-                for player in self.history.get_focus_val().players.iter() {
-                    if player.position == world_space_pt {
-                        self.selected = Some(Selection::Player(player.id));
-                        return;
-                    }
-                }
-                self.selected = Some(Selection::GridCell(world_space_pt));
+                let dummy_cell = GameCell::new();
+                let game_cell = self.history
+                    .get_focus_val()
+                    .map
+                    .get(&world_space_pt)
+                    .unwrap_or(&dummy_cell);
+                self.selected = match game_cell.player {
+                    Some(id) => Some(Selection::Player(id)),
+                    None => Some(Selection::GridCell(world_space_pt)),
+                };
             }
             _ => {}
         }
@@ -191,7 +194,7 @@ impl event::EventHandler for GameState {
         graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
         draw_grid(ctx)?;
         graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
-        for player in self.history.get_focus_val().players.iter() {
+        for player in self.history.get_focus_val().players.values() {
             self.image_map.player.draw(
                 ctx,
                 transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
@@ -227,10 +230,13 @@ impl event::EventHandler for GameState {
                     },
                 )?;
             }
-            for pt in self.history.get_focus_val().portals.keys() {
+            for portal in self.history.get_focus_val().portals.values() {
                 self.image_map.portal.draw(
                     ctx,
-                    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(*pt),
+                    transform
+                        * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(
+                            portal.player_position,
+                        ),
                     0.,
                 )?;
             }

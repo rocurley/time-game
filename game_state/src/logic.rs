@@ -2,17 +2,32 @@ extern crate types;
 
 extern crate nalgebra;
 
+use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use self::types::{Direction, GameFrame, Move, Plan, Player, Portal, PortalGraphNode};
+use self::types::{Direction, GameCell, GameFrame, Move, Plan, Player, Point, Portal,
+                  PortalGraphNode};
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
     let mut portal_graph = initial_frame.portal_graph.clone();
-    let mut players = initial_frame
-        .players
-        .iter()
-        .filter_map(|old_player: &Player| match plan.moves.get(&old_player.id) {
-            None => Some(Ok(old_player.clone())),
+    let mut map: HashMap<Point, GameCell> = portals
+        .values()
+        .map(|portal| {
+            (
+                portal.player_position,
+                GameCell {
+                    player: None,
+                    portal: Some(portal.id),
+                },
+            )
+        })
+        .collect();
+    let mut players = HashMap::new();
+    for old_player in initial_frame.players.values() {
+        match plan.moves.get(&old_player.id) {
+            None => {
+                players.insert(old_player.id, old_player.clone());
+            }
             Some(&Move::Direction(ref direction)) => {
                 let mut player: Player = old_player.clone();
                 let delta: nalgebra::Vector2<i32> = match *direction {
@@ -22,36 +37,46 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                     Direction::Right => nalgebra::Vector2::x(),
                 };
                 player.position += delta;
-                Some(Ok(player))
+                players.insert(player.id, player);
             }
             Some(&Move::Jump) => {
-                if let Entry::Occupied(portal_entry) = portals.entry(old_player.position) {
-                    let (_, portal) = portal_entry.remove_entry();
+                //Since map was only populated with portals thus far, this is fine.
+                if let Entry::Occupied(game_cell_entry) = map.entry(old_player.position) {
+                    let (_, game_cell) = game_cell_entry.remove_entry();
+                    let portal_id = game_cell
+                        .portal
+                        .expect("Portal missing when game cell was not.");
+                    portals.remove(&portal_id);
                     portal_graph
                         .edges
-                        .insert(old_player.id, PortalGraphNode::Portal(portal.id));
-                    if portal_graph
-                        .get_node(PortalGraphNode::Portal(portal.id))
+                        .insert(old_player.id, PortalGraphNode::Portal(portal_id));
+                    if !portal_graph
+                        .get_node(PortalGraphNode::Portal(portal_id))
                         .connected_to(PortalGraphNode::End)
                     {
-                        None
-                    } else {
-                        Some(Err("Created infinite loop"))
+                        return Err("Created infinite loop");
                     }
                 } else {
-                    Some(Err("Tried to close loop at wrong positon"))
+                    return Err("Tried to close loop at wrong positon");
                 }
             }
-        })
-        .collect::<Result<Vec<Player>, &str>>()?;
+        }
+    }
     for pos in plan.portals.iter() {
         let player = Player::new(*pos);
         let player_id = player.id;
-        players.push(player);
-        match portals.entry(*pos) {
+        players.insert(player_id, player);
+        match map.entry(*pos) {
+            //Again, the map is only populated with portals so far
             Entry::Occupied(_) => return Err("Overlapping portals prohibited."),
             Entry::Vacant(vacant_entry) => {
-                let portal_id = vacant_entry.insert(Portal::new(0, *pos)).id;
+                let portal = Portal::new(0, *pos);
+                let portal_id = portal.id;
+                vacant_entry.insert(GameCell {
+                    portal: Some(portal_id),
+                    player: None,
+                });
+                portals.insert(portal_id, portal);
                 portal_graph.insert_node(
                     PortalGraphNode::Portal(portal_id),
                     Vec::new(),
@@ -60,9 +85,17 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
             }
         };
     }
+    for player in players.values() {
+        let game_cell = map.entry(player.position).or_insert_with(GameCell::new);
+        if !game_cell.player.is_none() {
+            return Err("Player collision");
+        }
+        game_cell.player = Some(player.id)
+    }
     Ok(GameFrame {
         players,
         portals,
+        map,
         portal_graph,
     })
 }

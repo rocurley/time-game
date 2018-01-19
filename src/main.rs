@@ -1,7 +1,7 @@
 extern crate game_state;
 extern crate types;
 
-use types::{Player, PortalGraphNode};
+use types::{GameCell, Player, PortalGraphNode};
 use game_state::GameState;
 
 //mod support;
@@ -36,7 +36,14 @@ pub fn main() {
         let game_frame = game_state.history.get_focus_val_mut();
         let player = Player::new(Point2::new(0, 4));
         let player_id = player.id;
-        game_frame.players.push(player);
+        game_frame.map.insert(
+            player.position,
+            GameCell {
+                player: Some(player_id),
+                portal: None,
+            },
+        );
+        game_frame.players.insert(player_id, player);
         game_frame
             .portal_graph
             .insert_node(PortalGraphNode::Beginning, Vec::new(), Vec::new());
