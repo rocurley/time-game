@@ -9,3 +9,5 @@ types = { path = "types" }
 game_state = { path = "game_state" }
 
 ggez = "0.4.0-rc.2"
+
+[workspace]
