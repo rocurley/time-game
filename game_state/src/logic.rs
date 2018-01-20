@@ -10,16 +10,16 @@ use self::types::{Direction, GameCell, GameFrame, Move, Plan, Player, Point, Por
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
     let mut portal_graph = initial_frame.portal_graph.clone();
-    let mut map: HashMap<Point, GameCell> = portals
-        .values()
-        .map(|portal| {
-            (
-                portal.player_position,
-                GameCell {
-                    player: None,
-                    portal: Some(portal.id),
-                },
-            )
+    let mut map: HashMap<Point, GameCell> = initial_frame
+        .map
+        .iter()
+        .filter_map(|(k, old_cell)| {
+            if old_cell.portal.is_none() && old_cell.item.is_none() {
+                return None;
+            }
+            let mut cell = old_cell.clone();
+            cell.player = None;
+            Some((k.clone(), cell))
         })
         .collect();
     let mut players = HashMap::new();
@@ -66,24 +66,19 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
         let player = Player::new(*pos);
         let player_id = player.id;
         players.insert(player_id, player);
-        match map.entry(*pos) {
-            //Again, the map is only populated with portals so far
-            Entry::Occupied(_) => return Err("Overlapping portals prohibited."),
-            Entry::Vacant(vacant_entry) => {
-                let portal = Portal::new(0, *pos);
-                let portal_id = portal.id;
-                vacant_entry.insert(GameCell {
-                    portal: Some(portal_id),
-                    player: None,
-                });
-                portals.insert(portal_id, portal);
-                portal_graph.insert_node(
-                    PortalGraphNode::Portal(portal_id),
-                    Vec::new(),
-                    vec![(PortalGraphNode::End, player_id)],
-                );
-            }
-        };
+        let game_cell = map.entry(*pos).or_insert_with(GameCell::new);
+        if game_cell.portal.is_some() {
+            return Err("Overlapping portals prohibited.");
+        }
+        let portal = Portal::new(0, *pos);
+        let portal_id = portal.id;
+        game_cell.portal = Some(portal_id);
+        portals.insert(portal_id, portal);
+        portal_graph.insert_node(
+            PortalGraphNode::Portal(portal_id),
+            Vec::new(),
+            vec![(PortalGraphNode::End, player_id)],
+        );
     }
     for player in players.values() {
         let game_cell = map.entry(player.position).or_insert_with(GameCell::new);

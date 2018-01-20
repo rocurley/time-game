@@ -52,9 +52,11 @@ pub enum PortalGraphNode {
 
 type PortalGraph = Graph<PortalGraphNode, Id<Player>>;
 
+#[derive(Clone)]
 pub struct GameCell {
     pub player: Option<Id<Player>>,
     pub portal: Option<Id<Portal>>,
+    pub item: Option<Item>,
 }
 
 impl GameCell {
@@ -62,6 +64,7 @@ impl GameCell {
         GameCell {
             player: None,
             portal: None,
+            item: None,
         }
     }
 }
@@ -222,6 +225,7 @@ impl Player {
 
 pub type Point = nalgebra::Point2<i32>;
 
+#[derive(Clone)]
 pub enum Item {
     Key(Key),
 }
@@ -234,6 +238,7 @@ impl Item {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Key {}
 
 impl Key {

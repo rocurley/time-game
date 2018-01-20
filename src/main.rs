@@ -4,9 +4,6 @@ extern crate types;
 use types::{GameCell, Player, PortalGraphNode};
 use game_state::GameState;
 
-//mod support;
-//mod logic;
-
 extern crate ggez;
 use ggez::*;
 use nalgebra::Point2;
@@ -41,6 +38,7 @@ pub fn main() {
             GameCell {
                 player: Some(player_id),
                 portal: None,
+                item: None,
             },
         );
         game_frame.players.insert(player_id, player);
