@@ -3,6 +3,9 @@ extern crate nalgebra;
 extern crate rand;
 extern crate tree;
 extern crate types;
+#[cfg(test)]
+#[macro_use]
+pub extern crate proptest;
 
 use ggez::{event, graphics};
 use ggez::graphics::Point2;

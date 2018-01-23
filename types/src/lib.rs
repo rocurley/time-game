@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use ggez::graphics;
 use std::marker::PhantomData;
 use graph::Graph;
+use std::fmt;
 
 pub const SCALE: f32 = 100.;
 
@@ -42,6 +43,11 @@ impl<T> rand::Rand for Id<T> {
         Id(rand::Rand::rand(rng), PhantomData)
     }
 }
+impl<T> fmt::Debug for Id<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Id::new({})", self.0)
+    }
+}
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub enum PortalGraphNode {
@@ -52,7 +58,7 @@ pub enum PortalGraphNode {
 
 type PortalGraph = Graph<PortalGraphNode, Id<Player>>;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct GameCell {
     pub player: Option<Id<Player>>,
     pub portal: Option<Id<Portal>>,
@@ -71,11 +77,21 @@ impl GameCell {
 
 type IdMap<T> = HashMap<Id<T>, T>;
 
+#[derive(Clone)]
 pub struct GameFrame {
     pub players: IdMap<Player>,
     pub portals: IdMap<Portal>,
     pub map: HashMap<Point, GameCell>,
     pub portal_graph: PortalGraph,
+}
+impl fmt::Debug for GameFrame {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "GameFrame{{ players:{:?}, portals:{:?}, map:{:?}, portal_graph:???}}",
+            self.players, self.portals, self.map
+        )
+    }
 }
 
 impl GameFrame {
@@ -86,6 +102,24 @@ impl GameFrame {
             map: HashMap::new(),
             portal_graph: Graph::new(),
         }
+    }
+    pub fn insert_player(&mut self, player: Player) -> Result<(), &'static str> {
+        let game_cell = self.map
+            .entry(player.position)
+            .or_insert_with(GameCell::new);
+        if game_cell.player.is_some() {
+            return Err("Cannot insert player: already occupied.");
+        }
+        game_cell.player = Some(player.id);
+        self.portal_graph
+            .insert_node(PortalGraphNode::Beginning, Vec::new(), Vec::new());
+        self.portal_graph.insert_node(
+            PortalGraphNode::End,
+            vec![(PortalGraphNode::Beginning, player.id)],
+            Vec::new(),
+        );
+        self.players.insert(player.id, player);
+        Ok(())
     }
 }
 
@@ -123,7 +157,7 @@ impl ImageMap {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Portal {
     pub timestamp: usize,
     pub id: Id<Portal>,
@@ -140,7 +174,7 @@ impl Portal {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Direction {
     Up,
     Down,
@@ -148,26 +182,13 @@ pub enum Direction {
     Right,
 }
 
-impl Direction {
-    /*
-    fn rotation(&self) -> Array2<f64> {
-        match *self {
-            Direction::Up => array![[1., 0.], [0., 1.]],
-            Direction::Down => array![[-1., 0.], [0., -1.]],
-            Direction::Left => array![[0., -1.], [1., 0.]],
-            Direction::Right => array![[0., 1.], [-1., 0.]],
-        }
-    }
-    */
-}
-
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Move {
     Direction(Direction),
     Jump,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Plan {
     pub moves: HashMap<Id<Player>, Move>,
     pub portals: HashSet<Point>,
@@ -208,7 +229,7 @@ impl CachablePlan {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Player {
     pub id: Id<Player>,
     pub position: Point,
@@ -225,7 +246,7 @@ impl Player {
 
 pub type Point = nalgebra::Point2<i32>;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Item {
     Key(Key),
 }
@@ -238,7 +259,7 @@ impl Item {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Key {}
 
 impl Key {

@@ -1,7 +1,7 @@
 extern crate game_state;
 extern crate types;
 
-use types::{GameCell, Player, PortalGraphNode};
+use types::Player;
 use game_state::GameState;
 
 extern crate ggez;
@@ -31,25 +31,9 @@ pub fn main() {
     let game_state = &mut GameState::new(ctx).unwrap();
     {
         let game_frame = game_state.history.get_focus_val_mut();
-        let player = Player::new(Point2::new(0, 4));
-        let player_id = player.id;
-        game_frame.map.insert(
-            player.position,
-            GameCell {
-                player: Some(player_id),
-                portal: None,
-                item: None,
-            },
-        );
-        game_frame.players.insert(player_id, player);
         game_frame
-            .portal_graph
-            .insert_node(PortalGraphNode::Beginning, Vec::new(), Vec::new());
-        game_frame.portal_graph.insert_node(
-            PortalGraphNode::End,
-            vec![(PortalGraphNode::Beginning, player_id)],
-            Vec::new(),
-        );
+            .insert_player(Player::new(Point2::new(0, 4)))
+            .expect("Could not insert player");
     }
     event::run(ctx, game_state).unwrap();
 }

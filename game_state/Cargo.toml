@@ -10,3 +10,4 @@ types = { path = "../types" }
 rand = "0.4.1"
 ggez = "0.4.0-rc.2"
 nalgebra = "0.13.1"
+proptest = "0.4.0"
