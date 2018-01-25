@@ -73,6 +73,9 @@ impl GameCell {
             item: None,
         }
     }
+    pub fn is_empty(&self) -> bool {
+        return self.player.is_none() && self.portal.is_none() && self.item.is_none();
+    }
 }
 
 type IdMap<T> = HashMap<Id<T>, T>;

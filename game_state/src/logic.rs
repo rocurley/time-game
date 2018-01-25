@@ -40,21 +40,26 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 players.insert(player.id, player);
             }
             Some(&Move::Jump) => {
-                //Since map was only populated with portals thus far, this is fine.
-                if let Entry::Occupied(game_cell_entry) = map.entry(old_player.position) {
-                    let (_, game_cell) = game_cell_entry.remove_entry();
-                    let portal_id = game_cell
-                        .portal
-                        .expect("Portal missing when game cell was not.");
-                    portals.remove(&portal_id);
-                    portal_graph
-                        .edges
-                        .insert(old_player.id, PortalGraphNode::Portal(portal_id));
-                    if !portal_graph
-                        .get_node(PortalGraphNode::Portal(portal_id))
-                        .connected_to(PortalGraphNode::End)
+                if let Entry::Occupied(mut game_cell_entry) = map.entry(old_player.position) {
                     {
-                        return Err("Created infinite loop");
+                        let game_cell = game_cell_entry.get_mut();
+                        let portal_id = game_cell
+                            .portal
+                            .take()
+                            .ok_or("Tried to close loop at wrong position")?;
+                        portals.remove(&portal_id);
+                        portal_graph
+                            .edges
+                            .insert(old_player.id, PortalGraphNode::Portal(portal_id));
+                        if !portal_graph
+                            .get_node(PortalGraphNode::Portal(portal_id))
+                            .connected_to(PortalGraphNode::End)
+                        {
+                            return Err("Created infinite loop");
+                        }
+                    }
+                    if game_cell_entry.get().is_empty() {
+                        game_cell_entry.remove();
                     }
                 } else {
                     return Err("Tried to close loop at wrong positon");
