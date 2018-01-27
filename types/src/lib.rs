@@ -5,6 +5,7 @@ extern crate rand;
 extern crate tree;
 
 use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::Entry;
 use ggez::graphics;
 use std::marker::PhantomData;
 use graph::Graph;
@@ -80,19 +81,63 @@ impl GameCell {
 
 type IdMap<T> = HashMap<Id<T>, T>;
 
+#[derive(Clone, Debug)]
+pub struct DoubleMap<T> {
+    pub by_id: IdMap<T>,
+    pub by_position: HashMap<Point, Id<T>>,
+}
+impl<T> DoubleMap<T> {
+    fn new() -> Self {
+        DoubleMap {
+            by_id: HashMap::new(),
+            by_position: HashMap::new(),
+        }
+    }
+}
+impl DoubleMap<Portal> {
+    pub fn insert(&mut self, pos: Point, portal: Portal) -> Result<(), &'static str> {
+        match self.by_position.entry(pos) {
+            Entry::Occupied(_) => return Err("Portal position occupied"),
+            Entry::Vacant(position_entry) => match self.by_id.entry(portal.id) {
+                Entry::Occupied(_) => return Err("Portal id already exists"),
+                Entry::Vacant(mut id_entry) => {
+                    position_entry.insert(portal.id);
+                    id_entry.insert(portal);
+                    Ok(())
+                }
+            },
+        }
+    }
+}
+impl DoubleMap<Player> {
+    pub fn insert(&mut self, player: Player) -> Result<(), &'static str> {
+        match self.by_position.entry(player.position) {
+            Entry::Occupied(_) => return Err("Player position occupied"),
+            Entry::Vacant(position_entry) => match self.by_id.entry(player.id) {
+                Entry::Occupied(_) => return Err("Player id already exists"),
+                Entry::Vacant(mut id_entry) => {
+                    position_entry.insert(player.id);
+                    id_entry.insert(player);
+                    Ok(())
+                }
+            },
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct GameFrame {
-    pub players: IdMap<Player>,
-    pub portals: IdMap<Portal>,
-    pub map: HashMap<Point, GameCell>,
+    pub players: DoubleMap<Player>,
+    pub portals: DoubleMap<Portal>,
+    pub items: HashMap<Point, Item>,
     pub portal_graph: PortalGraph,
 }
 impl fmt::Debug for GameFrame {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "GameFrame{{ players:{:?}, portals:{:?}, map:{:?}, portal_graph:???}}",
-            self.players, self.portals, self.map
+            "GameFrame{{ players:{:?}, portals:{:?}, items:{:?}, portal_graph:???}}",
+            self.players, self.portals, self.items
         )
     }
 }
@@ -100,29 +145,11 @@ impl fmt::Debug for GameFrame {
 impl GameFrame {
     pub fn new() -> Self {
         GameFrame {
-            players: HashMap::new(),
-            portals: HashMap::new(),
-            map: HashMap::new(),
+            players: DoubleMap::new(),
+            portals: DoubleMap::new(),
+            items: HashMap::new(),
             portal_graph: Graph::new(),
         }
-    }
-    pub fn insert_player(&mut self, player: Player) -> Result<(), &'static str> {
-        let game_cell = self.map
-            .entry(player.position)
-            .or_insert_with(GameCell::new);
-        if game_cell.player.is_some() {
-            return Err("Cannot insert player: already occupied.");
-        }
-        game_cell.player = Some(player.id);
-        self.portal_graph
-            .insert_node(PortalGraphNode::Beginning, Vec::new(), Vec::new());
-        self.portal_graph.insert_node(
-            PortalGraphNode::End,
-            vec![(PortalGraphNode::Beginning, player.id)],
-            Vec::new(),
-        );
-        self.players.insert(player.id, player);
-        Ok(())
     }
 }
 

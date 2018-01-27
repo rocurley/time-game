@@ -4,29 +4,17 @@ extern crate nalgebra;
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use self::types::{Direction, GameCell, GameFrame, Move, Plan, Player, Point, Portal,
-                  PortalGraphNode};
+use self::types::{Direction, DoubleMap, GameFrame, Move, Plan, Player, Portal, PortalGraphNode};
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
     let mut portal_graph = initial_frame.portal_graph.clone();
-    let mut map: HashMap<Point, GameCell> = initial_frame
-        .map
-        .iter()
-        .filter_map(|(k, old_cell)| {
-            if old_cell.portal.is_none() && old_cell.item.is_none() {
-                return None;
-            }
-            let mut cell = old_cell.clone();
-            cell.player = None;
-            Some((k.clone(), cell))
-        })
-        .collect();
-    let mut players = HashMap::new();
-    for old_player in initial_frame.players.values() {
+    let mut items = initial_frame.items.clone();
+    let mut players_by_id = HashMap::new();
+    for old_player in initial_frame.players.by_id.values() {
         match plan.moves.get(&old_player.id) {
             None => {
-                players.insert(old_player.id, old_player.clone());
+                players_by_id.insert(old_player.id, old_player.clone());
             }
             Some(&Move::Direction(ref direction)) => {
                 let mut player: Player = old_player.clone();
@@ -37,32 +25,22 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                     Direction::Right => nalgebra::Vector2::x(),
                 };
                 player.position += delta;
-                players.insert(player.id, player);
+                players_by_id.insert(player.id, player);
             }
             Some(&Move::Jump) => {
-                if let Entry::Occupied(mut game_cell_entry) = map.entry(old_player.position) {
-                    {
-                        let game_cell = game_cell_entry.get_mut();
-                        let portal_id = game_cell
-                            .portal
-                            .take()
-                            .ok_or("Tried to close loop at wrong position")?;
-                        portals.remove(&portal_id);
-                        portal_graph
-                            .edges
-                            .insert(old_player.id, PortalGraphNode::Portal(portal_id));
-                        if !portal_graph
-                            .get_node(PortalGraphNode::Portal(portal_id))
-                            .connected_to(PortalGraphNode::End)
-                        {
-                            return Err("Created infinite loop");
-                        }
-                    }
-                    if game_cell_entry.get().is_empty() {
-                        game_cell_entry.remove();
-                    }
-                } else {
-                    return Err("Tried to close loop at wrong positon");
+                let portal_id = portals
+                    .by_position
+                    .remove(&old_player.position)
+                    .ok_or("Tried to close loop at wrong position")?;
+                portals.by_id.remove(&portal_id);
+                portal_graph
+                    .edges
+                    .insert(old_player.id, PortalGraphNode::Portal(portal_id));
+                if !portal_graph
+                    .get_node(PortalGraphNode::Portal(portal_id))
+                    .connected_to(PortalGraphNode::End)
+                {
+                    return Err("Created infinite loop");
                 }
             }
         }
@@ -70,32 +48,31 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
     for pos in plan.portals.iter() {
         let player = Player::new(*pos);
         let player_id = player.id;
-        players.insert(player_id, player);
-        let game_cell = map.entry(*pos).or_insert_with(GameCell::new);
-        if game_cell.portal.is_some() {
-            return Err("Overlapping portals prohibited.");
-        }
+        players_by_id.insert(player_id, player);
         let portal = Portal::new(0, *pos);
         let portal_id = portal.id;
-        game_cell.portal = Some(portal_id);
-        portals.insert(portal_id, portal);
+        portals.insert(*pos, portal)?;
         portal_graph.insert_node(
             PortalGraphNode::Portal(portal_id),
             Vec::new(),
             vec![(PortalGraphNode::End, player_id)],
         );
     }
-    for player in players.values() {
-        let game_cell = map.entry(player.position).or_insert_with(GameCell::new);
-        if !game_cell.player.is_none() {
+    let mut players = DoubleMap {
+        by_id: players_by_id,
+        by_position: HashMap::new(),
+    };
+    for player in players.by_id.values() {
+        if let Entry::Vacant(entry) = players.by_position.entry(player.position) {
+            entry.insert(player.id);
+        } else {
             return Err("Player collision");
         }
-        game_cell.player = Some(player.id)
     }
     Ok(GameFrame {
         players,
         portals,
-        map,
+        items,
         portal_graph,
     })
 }
@@ -125,10 +102,11 @@ mod tests {
     fn valid_plan(game_frame: GameFrame) -> BoxedStrategy<Plan> {
         let moves = proptest::collection::vec(
             proptest::sample::select(POSSIBLE_MOVES.as_ref()),
-            (game_frame.players.len()..game_frame.players.len() + 1),
+            (game_frame.players.by_id.len()..game_frame.players.by_id.len() + 1),
         ).prop_map(move |moves_vec| {
             game_frame
                 .players
+                .by_id
                 .keys()
                 .map(|id| id.clone())
                 .zip(moves_vec.into_iter())
@@ -155,7 +133,8 @@ mod tests {
             .prop_map(|player| {
                 let mut frame = GameFrame::new();
                 frame
-                    .insert_player(player)
+                    .players
+                    .insert(player)
                     .expect("Failed to insert player");
                 vec![frame]
             })
@@ -180,30 +159,27 @@ mod tests {
     }
 
     fn check_frame_consistency(game_frame: &GameFrame) {
-        let mut players_count = 0;
-        let mut portals_count = 0;
-        for (pt, game_cell) in game_frame.map.iter() {
-            for player_id in game_cell.player.iter() {
-                players_count += 1;
-                assert_eq!(game_frame.players.get(player_id).unwrap().position, *pt)
-            }
-            for portal_id in game_cell.portal.iter() {
-                portals_count += 1;
-                assert_eq!(
-                    game_frame.portals.get(portal_id).unwrap().player_position,
-                    *pt
-                )
-            }
+        for (pt, player_id) in game_frame.players.by_position.iter() {
+            assert_eq!(
+                game_frame.players.by_id.get(player_id).unwrap().position,
+                *pt
+            )
         }
-        assert_eq!(players_count, game_frame.players.len());
-        assert_eq!(portals_count, game_frame.portals.len());
+        assert_eq!(
+            game_frame.players.by_id.len(),
+            game_frame.players.by_position.len()
+        );
+        assert_eq!(
+            game_frame.portals.by_id.len(),
+            game_frame.portals.by_position.len()
+        );
     }
 
     proptest!{
         #[test]
         fn test_insert_player(ref player in arbitrary_player()) {
             let mut frame = GameFrame::new();
-            frame.insert_player(player.clone()).expect("Failed to insert player");
+            frame.players.insert(player.clone()).expect("Failed to insert player");
             check_frame_consistency(& frame);
         }
         #[test]

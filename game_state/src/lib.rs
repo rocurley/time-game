@@ -86,14 +86,13 @@ impl event::EventHandler for GameState {
         ).unwrap();
         match button {
             event::MouseButton::Left => {
-                let dummy_cell = GameCell::new();
-                let game_cell = self.history
+                let player = self.history
                     .get_focus_val()
-                    .map
-                    .get(&world_space_pt)
-                    .unwrap_or(&dummy_cell);
-                self.selected = match game_cell.player {
-                    Some(id) => Some(Selection::Player(id)),
+                    .players
+                    .by_position
+                    .get(&world_space_pt);
+                self.selected = match player {
+                    Some(id) => Some(Selection::Player(id.clone())),
                     None => Some(Selection::GridCell(world_space_pt)),
                 };
             }
@@ -197,7 +196,7 @@ impl event::EventHandler for GameState {
         graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
         draw_grid(ctx)?;
         graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
-        for player in self.history.get_focus_val().players.values() {
+        for player in self.history.get_focus_val().players.by_id.values() {
             self.image_map.player.draw(
                 ctx,
                 transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
@@ -233,7 +232,7 @@ impl event::EventHandler for GameState {
                     },
                 )?;
             }
-            for portal in self.history.get_focus_val().portals.values() {
+            for portal in self.history.get_focus_val().portals.by_id.values() {
                 self.image_map.portal.draw(
                     ctx,
                     transform

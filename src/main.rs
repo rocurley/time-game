@@ -32,7 +32,8 @@ pub fn main() {
     {
         let game_frame = game_state.history.get_focus_val_mut();
         game_frame
-            .insert_player(Player::new(Point2::new(0, 4)))
+            .players
+            .insert(Player::new(Point2::new(0, 4)))
             .expect("Could not insert player");
     }
     event::run(ctx, game_state).unwrap();
