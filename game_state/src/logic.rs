@@ -80,6 +80,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
 mod tests {
     use logic::apply_plan;
     use std::collections::HashSet;
+    use std::fmt::Debug;
     use super::super::proptest;
     use proptest::prelude::*;
     use super::types::{Direction, GameFrame, Move, Plan, Player};
@@ -128,7 +129,35 @@ mod tests {
             .boxed()
     }
 
-    fn unfold_arbitrary_plans(depth: u32) -> BoxedStrategy<Vec<GameFrame>> {
+    fn append_frame(prior_frames: Vec<GameFrame>) -> BoxedStrategy<Vec<GameFrame>> {
+        let prior_frame: GameFrame = prior_frames.last().expect("Empty frames vec").clone();
+        valid_plan(prior_frame.clone())
+            .prop_map(move |plan| apply_plan(&prior_frame, &plan.clone()))
+            .prop_filter("plan wasn't allowed", |frame| frame.is_ok())
+            .prop_map(move |frame| {
+                let new_frame = frame.expect("Should have been filtered");
+                let mut new_frames = prior_frames.clone();
+                new_frames.push(new_frame);
+                new_frames
+            })
+            .boxed()
+    }
+    fn fix_prop_map<T>(x: T, f: fn(T) -> BoxedStrategy<(T, bool)>) -> BoxedStrategy<T>
+    where
+        T: Clone,
+        T: Debug,
+        T: 'static,
+    {
+        f(x).prop_flat_map(move |(x, cont)| {
+                if cont {
+                    fix_prop_map(x, f)
+                } else {
+                    proptest::strategy::Just(x).boxed()
+                }
+            }).boxed()
+    }
+
+    fn unfold_arbitrary_plans(depth: usize) -> BoxedStrategy<Vec<GameFrame>> {
         arbitrary_player()
             .prop_map(|player| {
                 let mut frame = GameFrame::new();
@@ -138,23 +167,21 @@ mod tests {
                     .expect("Failed to insert player");
                 vec![frame]
             })
-            .prop_recursive(depth, depth, 1, |prop_prior_frames| {
-                prop_prior_frames
-                    .prop_flat_map(|prior_frames: Vec<GameFrame>| {
-                        let prior_frame: GameFrame =
-                            prior_frames.last().expect("Empty frames vec").clone();
-                        valid_plan(prior_frame.clone())
-                            .prop_map(move |plan| apply_plan(&prior_frame, &plan.clone()))
-                            .prop_filter("plan wasn't allowed", |frame| frame.is_ok())
-                            .prop_map(move |frame| {
-                                let new_frame = frame.expect("Should have been filtered");
-                                let mut new_frames = prior_frames.clone();
-                                new_frames.push(new_frame);
-                                new_frames
-                            })
-                    })
-                    .boxed()
+            .prop_flat_map(move |initial_frames| {
+                fix_prop_map(
+                    (depth, initial_frames),
+                    |(depth_remaining, prior_frames)| {
+                        if depth_remaining == 0 {
+                            proptest::strategy::Just(((0, prior_frames), false)).boxed()
+                        } else {
+                            append_frame(prior_frames)
+                                .prop_map(move |frames| ((depth_remaining - 1, frames), true))
+                                .boxed()
+                        }
+                    },
+                )
             })
+            .prop_map(|(_, frames)| frames)
             .boxed()
     }
 
@@ -184,6 +211,7 @@ mod tests {
         }
         #[test]
         fn test_apply_plan(ref game_frames in unfold_arbitrary_plans(10)) {
+            assert!(game_frames.len() > 5);
             for frame in game_frames.iter() {
                 check_frame_consistency(frame)
             }
