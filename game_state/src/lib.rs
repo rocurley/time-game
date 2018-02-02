@@ -118,6 +118,7 @@ impl event::EventHandler for GameState {
                     event::Keycode::S => Some(Update::SetMove(Move::Direction(Direction::Down))),
                     event::Keycode::D => Some(Update::SetMove(Move::Direction(Direction::Right))),
                     event::Keycode::Q => Some(Update::SetMove(Move::Jump)),
+                    event::Keycode::G => Some(Update::SetMove(Move::PickUp)),
                     event::Keycode::Space => Some(Update::ClearMove),
                     _ => None,
                 };
@@ -234,16 +235,6 @@ impl event::EventHandler for GameState {
                     },
                 )?;
             }
-            for portal in self.history.get_focus_val().portals.by_id.values() {
-                self.image_map.portal.draw(
-                    ctx,
-                    transform
-                        * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(
-                            portal.player_position,
-                        ),
-                    0.,
-                )?;
-            }
             for pt in &self.current_plan.get(&self.history.focus.children).portals {
                 self.image_map.jump_icon.draw(
                     ctx,
@@ -258,6 +249,21 @@ impl event::EventHandler for GameState {
                     0.,
                 )?;
             }
+        }
+        for portal in self.history.get_focus_val().portals.by_id.values() {
+            self.image_map.portal.draw(
+                ctx,
+                transform
+                    * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(portal.player_position),
+                0.,
+            )?;
+        }
+        for (pt, item) in self.history.get_focus_val().items.iter() {
+            item.image(&self.image_map).draw(
+                ctx,
+                transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(*pt),
+                0.,
+            )?;
         }
         if let Some(Selection::GridCell(pt)) = self.selected {
             self.image_map.selection.draw(

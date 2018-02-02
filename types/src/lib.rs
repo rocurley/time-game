@@ -292,7 +292,7 @@ pub enum Item {
 }
 
 impl Item {
-    pub fn image(&self, image_map: ImageMap) -> graphics::Image {
+    pub fn image<'a>(&self, image_map: &'a ImageMap) -> &'a graphics::Image {
         match self {
             &Item::Key(ref key) => key.image(image_map),
         }
@@ -303,8 +303,8 @@ impl Item {
 pub struct Key {}
 
 impl Key {
-    pub fn image(&self, image_map: ImageMap) -> graphics::Image {
-        image_map.key
+    pub fn image<'a>(&self, image_map: &'a ImageMap) -> &'a graphics::Image {
+        &image_map.key
     }
 }
 
