@@ -43,6 +43,25 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                     return Err("Created infinite loop");
                 }
             }
+            Some(&Move::PickUp) => {
+                let mut player: Player = old_player.clone();
+                let item = items
+                    .remove(&player.position)
+                    .ok_or("Couln't pick up: no item")?;
+                *player.inventory.entry(item).or_insert(0) += 1;
+                players_by_id.insert(player.id, player);
+            }
+            Some(&Move::Drop(ref item)) => {
+                let mut player: Player = old_player.clone();
+                let mut item_count = match player.inventory.entry(item.clone()) {
+                    Entry::Vacant(_) => return Err("Tried to drop missing item"),
+                    Entry::Occupied(entry) => entry,
+                };
+                *item_count.get_mut() -= 1;
+                if *item_count.get() == 0 {
+                    item_count.remove();
+                }
+            }
         }
     }
     for pos in plan.portals.iter() {

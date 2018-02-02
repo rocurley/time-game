@@ -218,6 +218,8 @@ impl event::EventHandler for GameState {
                         (&self.image_map.move_arrow, angle)
                     }
                     &Move::Jump => (&self.image_map.jump_icon, 0.),
+                    &Move::PickUp => (&self.image_map.pick_up_icon, 0.),
+                    &Move::Drop(_) => (&self.image_map.drop_icon, 0.),
                 };
                 let dest = transform
                     * (nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position)

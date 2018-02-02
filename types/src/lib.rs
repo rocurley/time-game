@@ -164,6 +164,8 @@ pub struct ImageMap {
     pub selection: graphics::Image,
     pub move_arrow: graphics::Image,
     pub jump_icon: graphics::Image,
+    pub pick_up_icon: graphics::Image,
+    pub drop_icon: graphics::Image,
     pub portal: graphics::Image,
     pub key: graphics::Image,
 }
@@ -174,6 +176,8 @@ impl ImageMap {
         let selection = graphics::Image::new(ctx, "/images/selection.png")?;
         let move_arrow = graphics::Image::new(ctx, "/images/arrow.png")?;
         let jump_icon = graphics::Image::new(ctx, "/images/jump.png")?;
+        let pick_up_icon = graphics::Image::new(ctx, "/images/pick_up.png")?;
+        let drop_icon = graphics::Image::new(ctx, "/images/drop.png")?;
         let portal = graphics::Image::new(ctx, "/images/portal.png")?;
         let key = graphics::Image::new(ctx, "/images/key.png")?;
         Ok(ImageMap {
@@ -181,6 +185,8 @@ impl ImageMap {
             selection,
             move_arrow,
             jump_icon,
+            pick_up_icon,
+            drop_icon,
             portal,
             key,
         })
@@ -216,6 +222,8 @@ pub enum Direction {
 pub enum Move {
     Direction(Direction),
     Jump,
+    PickUp,
+    Drop(Item),
 }
 
 #[derive(Clone, Debug)]
@@ -263,6 +271,7 @@ impl CachablePlan {
 pub struct Player {
     pub id: Id<Player>,
     pub position: Point,
+    pub inventory: HashMap<Item, usize>,
 }
 
 impl Player {
@@ -270,13 +279,14 @@ impl Player {
         Player {
             id: rand::random(),
             position,
+            inventory: HashMap::new(),
         }
     }
 }
 
 pub type Point = nalgebra::Point2<i32>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Item {
     Key(Key),
 }
@@ -289,7 +299,7 @@ impl Item {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Key {}
 
 impl Key {
