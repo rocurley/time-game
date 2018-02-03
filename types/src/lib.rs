@@ -155,9 +155,24 @@ impl GameFrame {
 
 #[derive(PartialEq, Eq)]
 pub enum Selection {
+    Top,
     Player(Id<Player>),
     GridCell(Point),
+    Inventory(Id<Player>),
 }
+
+impl Selection {
+    pub fn pop(& mut self) {
+        match self {
+            &mut Selection::Top => {}
+            &mut Selection::Player(_) => *self = Selection::Top,
+            &mut Selection::GridCell(_) => *self = Selection::Top,
+            &mut Selection::Inventory(id) => *self = Selection::Player(id),
+        }
+    }
+}
+
+
 
 pub struct ImageMap {
     pub player: graphics::Image,

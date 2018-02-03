@@ -36,7 +36,7 @@ fn draw_grid(ctx: &mut ggez::Context) -> ggez::GameResult<()> {
 
 pub struct GameState {
     pub history: tree::Zipper<GameFrame, Plan>,
-    pub selected: Option<Selection>,
+    pub selected: Selection,
     pub current_plan: CachablePlan,
     pub image_map: ImageMap,
 }
@@ -46,7 +46,7 @@ impl GameState {
         let image_map = ImageMap::new(ctx)?;
         Ok(GameState {
             history: tree::Zipper::new(tree::RoseTree::singleton(GameFrame::new())),
-            selected: None,
+            selected: Selection::Top,
             current_plan: CachablePlan::new(),
             image_map,
         })
@@ -92,8 +92,8 @@ impl event::EventHandler for GameState {
                     .by_position
                     .get(&world_space_pt);
                 self.selected = match player {
-                    Some(id) => Some(Selection::Player(id.clone())),
-                    None => Some(Selection::GridCell(world_space_pt)),
+                    Some(id) => Selection::Player(id.clone()),
+                    None => Selection::GridCell(world_space_pt),
                 };
             }
             _ => {}
@@ -106,37 +106,43 @@ impl event::EventHandler for GameState {
         _keymod: event::Mod,
         _repeat: bool,
     ) {
+        use event::Keycode;
         match self.selected {
-            Some(Selection::Player(player_id)) => {
+            Selection::Player(player_id) => {
                 enum Update {
-                    SetMove(Move),
-                    ClearMove,
+                    Move(Move),
+                    Other(Keycode),
                 }
-                let update_option = match key {
-                    event::Keycode::W => Some(Update::SetMove(Move::Direction(Direction::Up))),
-                    event::Keycode::A => Some(Update::SetMove(Move::Direction(Direction::Left))),
-                    event::Keycode::S => Some(Update::SetMove(Move::Direction(Direction::Down))),
-                    event::Keycode::D => Some(Update::SetMove(Move::Direction(Direction::Right))),
-                    event::Keycode::Q => Some(Update::SetMove(Move::Jump)),
-                    event::Keycode::G => Some(Update::SetMove(Move::PickUp)),
-                    event::Keycode::Space => Some(Update::ClearMove),
-                    _ => None,
+                let update = match key {
+                    Keycode::W => Update::Move(Move::Direction(Direction::Up)),
+                    Keycode::A => Update::Move(Move::Direction(Direction::Left)),
+                    Keycode::S => Update::Move(Move::Direction(Direction::Down)),
+                    Keycode::D => Update::Move(Move::Direction(Direction::Right)),
+                    Keycode::Q => Update::Move(Move::Jump),
+                    Keycode::G => Update::Move(Move::PickUp),
+                    keycode => Update::Other(keycode),
                 };
-                for update in update_option {
-                    match update {
-                        Update::SetMove(new_move) => self.current_plan
+                match update {
+                    Update::Move(new_move) => {
+                        self.current_plan
                             .cow(&self.history.focus.children)
                             .moves
-                            .insert(player_id, new_move),
-                        Update::ClearMove => self.current_plan
+                            .insert(player_id, new_move);
+                    },
+                    Update::Other(Keycode::Space) => {
+                        self.current_plan
                             .cow(&self.history.focus.children)
                             .moves
-                            .remove(&player_id),
-                    };
+                            .remove(&player_id);
+                    },
+                    Update::Other(Keycode::I) => {
+                        self.selected = Selection::Inventory(player_id);
+                    }
+                    _ => {},
                 }
             }
-            Some(Selection::GridCell(pt)) => {
-                if let event::Keycode::Q = key {
+            Selection::GridCell(pt) => {
+                if let Keycode::Q = key {
                     if self.current_plan
                         .get(&self.history.focus.children)
                         .portals
@@ -154,19 +160,20 @@ impl event::EventHandler for GameState {
                     }
                 }
             }
-            None => {}
+            Selection::Top => {}
+            Selection::Inventory(_) => {}
         }
         match key {
-            event::Keycode::Tab => if let Err(err) = self.rotate_plan() {
+            Keycode::Tab => if let Err(err) = self.rotate_plan() {
                 println!("{}", err);
             },
-            event::Keycode::Backspace => match self.history.up() {
+            Keycode::Backspace => match self.history.up() {
                 Ok(ix) => {
                     self.current_plan = CachablePlan::Old(ix);
                 }
                 Err(err) => println!("{}", err),
             },
-            event::Keycode::Return => match logic::apply_plan(
+            Keycode::Return => match logic::apply_plan(
                 &self.history.get_focus_val(),
                 &self.current_plan.get(&self.history.focus.children),
             ) {
@@ -185,6 +192,7 @@ impl event::EventHandler for GameState {
                     }
                 },
             },
+            Keycode::Escape => self.selected.pop(),
             _ => {}
         }
     }
@@ -242,7 +250,7 @@ impl event::EventHandler for GameState {
                     0.,
                 )?;
             }
-            if Some(Selection::Player(player.id)) == self.selected {
+            if Selection::Player(player.id) == self.selected {
                 self.image_map.selection.draw(
                     ctx,
                     transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
@@ -265,7 +273,7 @@ impl event::EventHandler for GameState {
                 0.,
             )?;
         }
-        if let Some(Selection::GridCell(pt)) = self.selected {
+        if let Selection::GridCell(pt) = self.selected {
             self.image_map.selection.draw(
                 ctx,
                 transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt),
