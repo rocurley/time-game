@@ -64,6 +64,21 @@ impl GameState {
             }
         }
     }
+    pub fn validate_selection(&mut self) {
+        match self.selected {
+            Selection::Top => {}
+            Selection::GridCell(pt) => {
+                if let Some(player_id) = self.history.get_focus_val().players.by_position.get(& pt) {
+                    self.selected = Selection::Player(player_id.clone());
+                }
+            }
+            Selection::Inventory(player_id) | Selection::Player(player_id) => {
+                if !self.history.get_focus_val().players.by_id.contains_key(&player_id){
+                    self.selected = Selection::Top;
+                }
+            }
+        }
+    }
 }
 
 impl event::EventHandler for GameState {
@@ -178,18 +193,21 @@ impl event::EventHandler for GameState {
                 &self.current_plan.get(&self.history.focus.children),
             ) {
                 Err(err) => println!("{}", err),
-                Ok(new_frame) => match self.current_plan {
-                    CachablePlan::Novel(ref mut plan) => {
-                        let old_plan = std::mem::replace(plan, Plan::new());
-                        self.history.push(new_frame, old_plan);
-                    }
-                    CachablePlan::Old(ix) => {
-                        self.history.down(ix).expect("Cached plan wasn't there!");
-                        self.current_plan = match self.history.focus.children.len() {
-                            0 => CachablePlan::new(),
-                            l => CachablePlan::Old(l - 1),
+                Ok(new_frame) => {
+                    match self.current_plan {
+                        CachablePlan::Novel(ref mut plan) => {
+                            let old_plan = std::mem::replace(plan, Plan::new());
+                            self.history.push(new_frame, old_plan);
+                        }
+                        CachablePlan::Old(ix) => {
+                            self.history.down(ix).expect("Cached plan wasn't there!");
+                            self.current_plan = match self.history.focus.children.len() {
+                                0 => CachablePlan::new(),
+                                l => CachablePlan::Old(l - 1),
+                            }
                         }
                     }
+                    self.validate_selection();
                 },
             },
             Keycode::Escape => self.selected.pop(),
@@ -250,13 +268,6 @@ impl event::EventHandler for GameState {
                     0.,
                 )?;
             }
-            if Selection::Player(player.id) == self.selected {
-                self.image_map.selection.draw(
-                    ctx,
-                    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
-                    0.,
-                )?;
-            }
         }
         for portal in self.history.get_focus_val().portals.by_id.values() {
             self.image_map.portal.draw(
@@ -273,12 +284,26 @@ impl event::EventHandler for GameState {
                 0.,
             )?;
         }
-        if let Selection::GridCell(pt) = self.selected {
-            self.image_map.selection.draw(
-                ctx,
-                transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt),
-                0.,
-            )?;
+        match self.selected {
+            Selection::Top => {}
+            Selection::GridCell(pt) => {
+                self.image_map.selection.draw(
+                    ctx,
+                    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt),
+                    0.,
+                )?;
+            }
+            Selection::Player(player_id) => {
+                let player = self.history.get_focus_val().players.by_id.get(& player_id)
+                    .expect("Invalid player selection");
+                self.image_map.selection.draw(
+                    ctx,
+                    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
+                    0.,
+                )?;
+            }
+            Selection::Inventory(player_id) => {
+            }
         }
         graphics::present(ctx);
         Ok(())
