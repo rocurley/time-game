@@ -19,19 +19,33 @@ use types::*;
 
 mod logic;
 
-fn draw_grid(ctx: &mut ggez::Context) -> ggez::GameResult<()> {
-    let graphics::Rect { x: x0, y: y0, w, h } = graphics::get_screen_coordinates(ctx);
-    let mut x = x0;
-    let mut y = y0;
-    while x <= x0 + w {
-        graphics::line(ctx, &[Point2::new(x, y0), Point2::new(x, y0 + h)], 5.)?;
+fn draw_grid(ctx: &mut ggez::Context, bounds : graphics::Rect) -> ggez::GameResult<()> {
+    let mut x = bounds.x;
+    let mut y = bounds.y;
+    while x <= bounds.x + bounds.w {
+        graphics::line(ctx, &[Point2::new(x, bounds.y-2.5), Point2::new(x, bounds.y + bounds.h+2.5)], 5.)?;
         x += SCALE;
     }
-    while y <= y0 + h {
-        graphics::line(ctx, &[Point2::new(x0, y), Point2::new(x0 + w, y)], 5.)?;
+    while y <= bounds.y + bounds.h {
+        graphics::line(ctx, &[Point2::new(bounds.x-2.5, y), Point2::new(bounds.x + bounds.w+2.5, y)], 5.)?;
         y += SCALE;
     }
     Ok(())
+}
+
+fn draw_map_grid(ctx: &mut ggez::Context) -> ggez::GameResult<()> {
+    let bounds = graphics::get_screen_coordinates(ctx);
+    draw_grid(ctx, bounds)
+}
+
+fn grid_corners(bounds : graphics::Rect) -> Box<Iterator<Item=Point2>> {
+    let width = (bounds.w/SCALE) as usize;
+    let height = (bounds.h/SCALE) as usize;
+    Box::new((0..width).flat_map(move |i| {
+        (0..height).map(move |j| {
+            Point2::new(bounds.x + i as f32 * SCALE, bounds.y + j as f32 * SCALE)
+        })
+    }))
 }
 
 pub struct GameState {
@@ -221,7 +235,7 @@ impl event::EventHandler for GameState {
         graphics::clear(ctx);
         graphics::set_background_color(ctx, graphics::Color::from_rgb(255, 255, 255));
         graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
-        draw_grid(ctx)?;
+        draw_map_grid(ctx)?;
         graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
         for player in self.history.get_focus_val().players.by_id.values() {
             self.image_map.player.draw(
@@ -303,6 +317,21 @@ impl event::EventHandler for GameState {
                 )?;
             }
             Selection::Inventory(player_id) => {
+                let mut bounds = graphics::get_screen_coordinates(ctx);
+                bounds.x += SCALE*1.5;
+                bounds.y += SCALE*1.5;
+                bounds.w -= SCALE*3.;
+                bounds.h -= SCALE*3.;
+                graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
+                graphics::rectangle(ctx, graphics::DrawMode::Fill, bounds);
+                graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
+                draw_grid(ctx, bounds)?;
+                graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
+                let inventory = &self.history.get_focus_val().players.by_id.get(& player_id)
+                    .expect("Invalid inventory player").inventory;
+                for ((item, count), pt) in inventory.iter().zip(grid_corners(bounds)) {
+                    item.image(&self.image_map).draw( ctx, pt, 0.)?;
+                }
             }
         }
         graphics::present(ctx);
