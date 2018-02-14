@@ -1,11 +1,11 @@
 extern crate ggez;
 extern crate nalgebra;
-extern crate rand;
-extern crate tree;
-extern crate types;
 #[cfg(test)]
 #[macro_use]
 pub extern crate proptest;
+extern crate rand;
+extern crate tree;
+extern crate types;
 
 use ggez::{event, graphics};
 use ggez::graphics::Point2;
@@ -19,15 +19,29 @@ use types::*;
 
 mod logic;
 
-fn draw_grid(ctx: &mut ggez::Context, bounds : graphics::Rect) -> ggez::GameResult<()> {
+fn draw_grid(ctx: &mut ggez::Context, bounds: graphics::Rect) -> ggez::GameResult<()> {
     let mut x = bounds.x;
     let mut y = bounds.y;
     while x <= bounds.x + bounds.w {
-        graphics::line(ctx, &[Point2::new(x, bounds.y-2.5), Point2::new(x, bounds.y + bounds.h+2.5)], 5.)?;
+        graphics::line(
+            ctx,
+            &[
+                Point2::new(x, bounds.y - 2.5),
+                Point2::new(x, bounds.y + bounds.h + 2.5),
+            ],
+            5.,
+        )?;
         x += SCALE;
     }
     while y <= bounds.y + bounds.h {
-        graphics::line(ctx, &[Point2::new(bounds.x-2.5, y), Point2::new(bounds.x + bounds.w+2.5, y)], 5.)?;
+        graphics::line(
+            ctx,
+            &[
+                Point2::new(bounds.x - 2.5, y),
+                Point2::new(bounds.x + bounds.w + 2.5, y),
+            ],
+            5.,
+        )?;
         y += SCALE;
     }
     Ok(())
@@ -38,13 +52,12 @@ fn draw_map_grid(ctx: &mut ggez::Context) -> ggez::GameResult<()> {
     draw_grid(ctx, bounds)
 }
 
-fn grid_corners(bounds : graphics::Rect) -> Box<Iterator<Item=Point2>> {
-    let width = (bounds.w/SCALE) as usize;
-    let height = (bounds.h/SCALE) as usize;
+fn grid_corners(bounds: graphics::Rect) -> Box<Iterator<Item = Point2>> {
+    let width = (bounds.w / SCALE) as usize;
+    let height = (bounds.h / SCALE) as usize;
     Box::new((0..width).flat_map(move |i| {
-        (0..height).map(move |j| {
-            Point2::new(bounds.x + i as f32 * SCALE, bounds.y + j as f32 * SCALE)
-        })
+        (0..height)
+            .map(move |j| Point2::new(bounds.x + i as f32 * SCALE, bounds.y + j as f32 * SCALE))
     }))
 }
 
@@ -82,16 +95,40 @@ impl GameState {
         match self.selected {
             Selection::Top => {}
             Selection::GridCell(pt) => {
-                if let Some(player_id) = self.history.get_focus_val().players.by_position.get(& pt) {
+                if let Some(player_id) = self.history.get_focus_val().players.by_position.get(&pt) {
                     self.selected = Selection::Player(player_id.clone());
                 }
             }
             Selection::Inventory(player_id) | Selection::Player(player_id) => {
-                if !self.history.get_focus_val().players.by_id.contains_key(&player_id){
+                if !self.history
+                    .get_focus_val()
+                    .players
+                    .by_id
+                    .contains_key(&player_id)
+                {
                     self.selected = Selection::Top;
                 }
             }
         }
+    }
+}
+
+fn click_selection(x: i32, y: i32, ctx: &ggez::Context, game_state: &GameState) -> Selection {
+    let graphics::Rect { x: x0, y: y0, .. } = graphics::get_screen_coordinates(ctx);
+    let inv_transform: Similarity2<f32> =
+        Similarity2::new(Vector2::new(x0, y0), 0., SCALE).inverse();
+    let world_space_pt: Point = nalgebra::try_convert::<Point2, nalgebra::Point2<i32>>(
+        inv_transform * Point2::new(x as f32, y as f32),
+    ).unwrap();
+    let player = game_state
+        .history
+        .get_focus_val()
+        .players
+        .by_position
+        .get(&world_space_pt);
+    match player {
+        Some(id) => Selection::Player(id.clone()),
+        None => Selection::GridCell(world_space_pt),
     }
 }
 
@@ -107,25 +144,8 @@ impl event::EventHandler for GameState {
         x: i32,
         y: i32,
     ) {
-        let graphics::Rect { x: x0, y: y0, .. } = graphics::get_screen_coordinates(ctx);
-        let inv_transform: Similarity2<f32> =
-            Similarity2::new(Vector2::new(x0, y0), 0., SCALE).inverse();
-        let world_space_pt: Point = nalgebra::try_convert::<Point2, nalgebra::Point2<i32>>(
-            inv_transform * Point2::new(x as f32, y as f32),
-        ).unwrap();
-        match button {
-            event::MouseButton::Left => {
-                let player = self.history
-                    .get_focus_val()
-                    .players
-                    .by_position
-                    .get(&world_space_pt);
-                self.selected = match player {
-                    Some(id) => Selection::Player(id.clone()),
-                    None => Selection::GridCell(world_space_pt),
-                };
-            }
-            _ => {}
+        if let event::MouseButton::Left = button {
+            self.selected = click_selection(x, y, ctx, self)
         }
     }
     fn key_down_event(
@@ -157,17 +177,17 @@ impl event::EventHandler for GameState {
                             .cow(&self.history.focus.children)
                             .moves
                             .insert(player_id, new_move);
-                    },
+                    }
                     Update::Other(Keycode::Space) => {
                         self.current_plan
                             .cow(&self.history.focus.children)
                             .moves
                             .remove(&player_id);
-                    },
+                    }
                     Update::Other(Keycode::I) => {
                         self.selected = Selection::Inventory(player_id);
                     }
-                    _ => {},
+                    _ => {}
                 }
             }
             Selection::GridCell(pt) => {
@@ -222,7 +242,7 @@ impl event::EventHandler for GameState {
                         }
                     }
                     self.validate_selection();
-                },
+                }
             },
             Keycode::Escape => self.selected.pop(),
             _ => {}
@@ -308,7 +328,11 @@ impl event::EventHandler for GameState {
                 )?;
             }
             Selection::Player(player_id) => {
-                let player = self.history.get_focus_val().players.by_id.get(& player_id)
+                let player = self.history
+                    .get_focus_val()
+                    .players
+                    .by_id
+                    .get(&player_id)
                     .expect("Invalid player selection");
                 self.image_map.selection.draw(
                     ctx,
@@ -318,19 +342,24 @@ impl event::EventHandler for GameState {
             }
             Selection::Inventory(player_id) => {
                 let mut bounds = graphics::get_screen_coordinates(ctx);
-                bounds.x += SCALE*1.5;
-                bounds.y += SCALE*1.5;
-                bounds.w -= SCALE*3.;
-                bounds.h -= SCALE*3.;
+                bounds.x += SCALE * 1.5;
+                bounds.y += SCALE * 1.5;
+                bounds.w -= SCALE * 3.;
+                bounds.h -= SCALE * 3.;
                 graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
-                graphics::rectangle(ctx, graphics::DrawMode::Fill, bounds);
+                graphics::rectangle(ctx, graphics::DrawMode::Fill, bounds)?;
                 graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
                 draw_grid(ctx, bounds)?;
                 graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
-                let inventory = &self.history.get_focus_val().players.by_id.get(& player_id)
-                    .expect("Invalid inventory player").inventory;
-                for ((item, count), pt) in inventory.iter().zip(grid_corners(bounds)) {
-                    item.image(&self.image_map).draw( ctx, pt, 0.)?;
+                let inventory = &self.history
+                    .get_focus_val()
+                    .players
+                    .by_id
+                    .get(&player_id)
+                    .expect("Invalid inventory player")
+                    .inventory;
+                for ((item, _count), pt) in inventory.iter().zip(grid_corners(bounds)) {
+                    item.image(&self.image_map).draw(ctx, pt, 0.)?;
                 }
             }
         }
