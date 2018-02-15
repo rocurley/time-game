@@ -158,21 +158,20 @@ pub enum Selection {
     Top,
     Player(Id<Player>),
     GridCell(Point),
-    Inventory(Id<Player>),
+    Inventory(Id<Player>, Option<Item>),
 }
 
 impl Selection {
-    pub fn pop(& mut self) {
+    pub fn pop(&mut self) {
         match self {
             &mut Selection::Top => {}
             &mut Selection::Player(_) => *self = Selection::Top,
             &mut Selection::GridCell(_) => *self = Selection::Top,
-            &mut Selection::Inventory(id) => *self = Selection::Player(id),
+            &mut Selection::Inventory(id, None) => *self = Selection::Player(id),
+            &mut Selection::Inventory(id, Some(_)) => *self = Selection::Inventory(id, None),
         }
     }
 }
-
-
 
 pub struct ImageMap {
     pub player: graphics::Image,

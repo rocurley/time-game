@@ -1,3 +1,5 @@
+#![feature(nll)]
+
 extern crate ggez;
 extern crate nalgebra;
 #[cfg(test)]
@@ -99,7 +101,7 @@ impl GameState {
                     self.selected = Selection::Player(player_id.clone());
                 }
             }
-            Selection::Inventory(player_id) | Selection::Player(player_id) => {
+            Selection::Inventory(player_id, None) | Selection::Player(player_id) => {
                 if !self.history
                     .get_focus_val()
                     .players
@@ -107,6 +109,16 @@ impl GameState {
                     .contains_key(&player_id)
                 {
                     self.selected = Selection::Top;
+                }
+            }
+            Selection::Inventory(player_id, Some(ref item)) => {
+                match self.history.get_focus_val().players.by_id.get(&player_id) {
+                    None => self.selected = Selection::Top,
+                    Some(player) => {
+                        if !player.inventory.contains_key(item) {
+                            self.selected = Selection::Inventory(player_id, None);
+                        }
+                    }
                 }
             }
         }
@@ -185,7 +197,7 @@ impl event::EventHandler for GameState {
                             .remove(&player_id);
                     }
                     Update::Other(Keycode::I) => {
-                        self.selected = Selection::Inventory(player_id);
+                        self.selected = Selection::Inventory(player_id, None);
                     }
                     _ => {}
                 }
@@ -210,7 +222,7 @@ impl event::EventHandler for GameState {
                 }
             }
             Selection::Top => {}
-            Selection::Inventory(_) => {}
+            Selection::Inventory(_, _) => {}
         }
         match key {
             Keycode::Tab => if let Err(err) = self.rotate_plan() {
@@ -340,7 +352,7 @@ impl event::EventHandler for GameState {
                     0.,
                 )?;
             }
-            Selection::Inventory(player_id) => {
+            Selection::Inventory(player_id, ref _selected_item) => {
                 let mut bounds = graphics::get_screen_coordinates(ctx);
                 bounds.x += SCALE * 1.5;
                 bounds.y += SCALE * 1.5;
