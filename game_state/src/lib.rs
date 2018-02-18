@@ -54,13 +54,17 @@ fn draw_map_grid(ctx: &mut ggez::Context) -> ggez::GameResult<()> {
     draw_grid(ctx, bounds)
 }
 
-fn grid_corners(bounds: graphics::Rect) -> Box<Iterator<Item = Point2>> {
-    let width = (bounds.w / SCALE) as usize;
-    let height = (bounds.h / SCALE) as usize;
-    Box::new((0..width).flat_map(move |i| {
-        (0..height)
-            .map(move |j| Point2::new(bounds.x + i as f32 * SCALE, bounds.y + j as f32 * SCALE))
-    }))
+fn grid_corner(pt: Point, bounds: graphics::Rect) -> Point2 {
+    Point2::new(
+        bounds.x + pt.x as f32 * SCALE,
+        bounds.y + pt.y as f32 * SCALE,
+    )
+}
+
+fn tiles(bounds: graphics::Rect) -> Box<Iterator<Item = Point>> {
+    let width = (bounds.w / SCALE) as i32;
+    let height = (bounds.h / SCALE) as i32;
+    Box::new((0..width).flat_map(move |x| (0..height).map(move |y| Point::new(x, y))))
 }
 
 pub struct GameState {
@@ -101,7 +105,7 @@ impl GameState {
                     self.selected = Selection::Player(player_id.clone());
                 }
             }
-            Selection::Inventory(player_id, None) | Selection::Player(player_id) => {
+            Selection::Inventory(player_id, _) | Selection::Player(player_id) => {
                 if !self.history
                     .get_focus_val()
                     .players
@@ -111,27 +115,33 @@ impl GameState {
                     self.selected = Selection::Top;
                 }
             }
-            Selection::Inventory(player_id, Some(ref item)) => {
-                match self.history.get_focus_val().players.by_id.get(&player_id) {
-                    None => self.selected = Selection::Top,
-                    Some(player) => {
-                        if !player.inventory.contains_key(item) {
-                            self.selected = Selection::Inventory(player_id, None);
-                        }
-                    }
-                }
-            }
         }
     }
 }
 
-fn click_selection(x: i32, y: i32, ctx: &ggez::Context, game_state: &GameState) -> Selection {
-    let graphics::Rect { x: x0, y: y0, .. } = graphics::get_screen_coordinates(ctx);
+fn inventory_bbox(ctx: &ggez::Context) -> ggez::graphics::Rect {
+    let mut bounds = graphics::get_screen_coordinates(ctx);
+    bounds.x += SCALE * 1.5;
+    bounds.y += SCALE * 1.5;
+    bounds.w -= SCALE * 3.;
+    bounds.h -= SCALE * 3.;
+    bounds
+}
+
+fn pixel_space_to_tile_space(pt: Point2, bbox: ggez::graphics::Rect) -> Option<Point> {
+    if !bbox.contains(pt) {
+        return None;
+    }
+    let graphics::Rect { x: x0, y: y0, .. } = bbox;
     let inv_transform: Similarity2<f32> =
         Similarity2::new(Vector2::new(x0, y0), 0., SCALE).inverse();
-    let world_space_pt: Point = nalgebra::try_convert::<Point2, nalgebra::Point2<i32>>(
-        inv_transform * Point2::new(x as f32, y as f32),
-    ).unwrap();
+    Some(nalgebra::try_convert::<Point2, nalgebra::Point2<i32>>(inv_transform * pt).unwrap())
+}
+
+fn world_selection(pt: Point2, ctx: &ggez::Context, game_state: &GameState) -> Selection {
+    let world_space_pt: Point =
+        pixel_space_to_tile_space(pt, graphics::get_screen_coordinates(ctx))
+            .expect("Somehow clicked outside window");
     let player = game_state
         .history
         .get_focus_val()
@@ -142,6 +152,14 @@ fn click_selection(x: i32, y: i32, ctx: &ggez::Context, game_state: &GameState) 
         Some(id) => Selection::Player(id.clone()),
         None => Selection::GridCell(world_space_pt),
     }
+}
+
+fn inventory_selection(pt: Point2, ctx: &ggez::Context, player_id: Id<Player>) -> Selection {
+    let bbox = inventory_bbox(ctx);
+    let inventory_space_pt = pixel_space_to_tile_space(pt, bbox);
+    let row_length = (bbox.w / SCALE).trunc() as u8;
+    let ix = inventory_space_pt.map(|pt| pt.x as u8 + pt.y as u8 * row_length);
+    Selection::Inventory(player_id, ix)
 }
 
 impl event::EventHandler for GameState {
@@ -157,7 +175,11 @@ impl event::EventHandler for GameState {
         y: i32,
     ) {
         if let event::MouseButton::Left = button {
-            self.selected = click_selection(x, y, ctx, self)
+            let pt = Point2::new(x as f32, y as f32);
+            self.selected = match self.selected {
+                Selection::Inventory(player_id, _) => inventory_selection(pt, ctx, player_id),
+                _ => world_selection(pt, ctx, self),
+            }
         }
     }
     fn key_down_event(
@@ -352,12 +374,8 @@ impl event::EventHandler for GameState {
                     0.,
                 )?;
             }
-            Selection::Inventory(player_id, ref _selected_item) => {
-                let mut bounds = graphics::get_screen_coordinates(ctx);
-                bounds.x += SCALE * 1.5;
-                bounds.y += SCALE * 1.5;
-                bounds.w -= SCALE * 3.;
-                bounds.h -= SCALE * 3.;
+            Selection::Inventory(player_id, ref selected_item_option) => {
+                let bounds = inventory_bbox(ctx);
                 graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
                 graphics::rectangle(ctx, graphics::DrawMode::Fill, bounds)?;
                 graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
@@ -370,8 +388,17 @@ impl event::EventHandler for GameState {
                     .get(&player_id)
                     .expect("Invalid inventory player")
                     .inventory;
-                for ((item, _count), pt) in inventory.iter().zip(grid_corners(bounds)) {
-                    item.image(&self.image_map).draw(ctx, pt, 0.)?;
+                let width = (bounds.w / SCALE) as usize;
+                for pt in tiles(bounds) {
+                    println!("{:?}", pt);
+                    let i = pt.x as usize + width * pt.y as usize;
+                    for inventory_cell in inventory[i].iter() {
+                        inventory_cell.item.image(&self.image_map).draw(
+                            ctx,
+                            grid_corner(pt, bounds),
+                            0.,
+                        )?;
+                    }
                 }
             }
         }

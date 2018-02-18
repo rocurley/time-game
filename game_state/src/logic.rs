@@ -4,7 +4,8 @@ extern crate nalgebra;
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use self::types::{Direction, DoubleMap, GameFrame, Move, Plan, Player, Portal, PortalGraphNode};
+use self::types::{insert_into_inventory, Direction, DoubleMap, GameFrame, Move, Plan, Player,
+                  Portal, PortalGraphNode};
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
@@ -48,18 +49,17 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 let item = items
                     .remove(&player.position)
                     .ok_or("Couln't pick up: no item")?;
-                *player.inventory.entry(item).or_insert(0) += 1;
+                insert_into_inventory(&mut player.inventory, item)?;
                 players_by_id.insert(player.id, player);
             }
-            Some(&Move::Drop(ref item)) => {
+            Some(&Move::Drop(item_ix)) => {
                 let mut player: Player = old_player.clone();
-                let mut item_count = match player.inventory.entry(item.clone()) {
-                    Entry::Vacant(_) => return Err("Tried to drop missing item"),
-                    Entry::Occupied(entry) => entry,
-                };
-                *item_count.get_mut() -= 1;
-                if *item_count.get() == 0 {
-                    item_count.remove();
+                let mut inventory_cell = player.inventory[item_ix as usize]
+                    .as_mut()
+                    .ok_or("Tried to drop from empty inventory slot")?;
+                inventory_cell.count -= 1;
+                if inventory_cell.count == 0 {
+                    player.inventory[item_ix as usize] = None;
                 }
             }
         }

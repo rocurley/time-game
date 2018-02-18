@@ -158,7 +158,7 @@ pub enum Selection {
     Top,
     Player(Id<Player>),
     GridCell(Point),
-    Inventory(Id<Player>, Option<Item>),
+    Inventory(Id<Player>, Option<u8>),
 }
 
 impl Selection {
@@ -237,7 +237,7 @@ pub enum Move {
     Direction(Direction),
     Jump,
     PickUp,
-    Drop(Item),
+    Drop(u8),
 }
 
 #[derive(Clone, Debug)]
@@ -281,11 +281,45 @@ impl CachablePlan {
     }
 }
 
+pub type Point = nalgebra::Point2<i32>;
+
+#[derive(Clone, Debug)]
+pub struct InventoryCell {
+    pub item: Item,
+    pub count: u8,
+}
+
+pub type Inventory = [Option<InventoryCell>; 32];
+
+pub fn insert_into_inventory(inventory: &mut Inventory, item: Item) -> Result<(), &'static str> {
+    let mut fallback: Option<&mut Option<InventoryCell>> = None;
+    for slot in inventory {
+        match slot {
+            &mut None => if fallback.is_none() {
+                fallback = Some(slot)
+            },
+            &mut Some(ref mut inventory_cell) => {
+                if inventory_cell.item == item {
+                    inventory_cell.count += 1;
+                    return Ok(());
+                }
+            }
+        }
+    }
+    match fallback {
+        None => Err("Nowhere to insert into inventory"),
+        Some(slot) => {
+            *slot = Some(InventoryCell { item, count: 1 });
+            Ok(())
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Player {
     pub id: Id<Player>,
     pub position: Point,
-    pub inventory: HashMap<Item, usize>,
+    pub inventory: Inventory,
 }
 
 impl Player {
@@ -293,12 +327,10 @@ impl Player {
         Player {
             id: rand::random(),
             position,
-            inventory: HashMap::new(),
+            inventory: Default::default(),
         }
     }
 }
-
-pub type Point = nalgebra::Point2<i32>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Item {
