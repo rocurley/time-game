@@ -119,13 +119,16 @@ impl GameState {
     }
 }
 
-fn inventory_bbox(ctx: &ggez::Context) -> ggez::graphics::Rect {
-    let mut bounds = graphics::get_screen_coordinates(ctx);
-    bounds.x += SCALE * 1.5;
-    bounds.y += SCALE * 1.5;
-    bounds.w -= SCALE * 3.;
-    bounds.h -= SCALE * 3.;
-    bounds
+fn inventory_bbox(ctx: &ggez::Context) -> graphics::Rect {
+    let screen_bounds = graphics::get_screen_coordinates(ctx);
+    let w = INVENTORY_WIDTH as f32 * SCALE;
+    let h = INVENTORY_HEIGHT as f32 * SCALE;
+    graphics::Rect {
+        x: screen_bounds.x + (screen_bounds.w - w) / 2.,
+        y: screen_bounds.y + (screen_bounds.h - h) / 2.,
+        w,
+        h,
+    }
 }
 
 fn pixel_space_to_tile_space(pt: Point2, bbox: ggez::graphics::Rect) -> Option<Point> {
@@ -136,6 +139,12 @@ fn pixel_space_to_tile_space(pt: Point2, bbox: ggez::graphics::Rect) -> Option<P
     let inv_transform: Similarity2<f32> =
         Similarity2::new(Vector2::new(x0, y0), 0., SCALE).inverse();
     Some(nalgebra::try_convert::<Point2, nalgebra::Point2<i32>>(inv_transform * pt).unwrap())
+}
+
+fn tile_space_to_pixel_space(pt: Point, bbox: graphics::Rect) -> Point2 {
+    let graphics::Rect { x: x0, y: y0, .. } = bbox;
+    let transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
+    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt)
 }
 
 fn world_selection(pt: Point2, ctx: &ggez::Context, game_state: &GameState) -> Selection {
@@ -376,7 +385,7 @@ impl event::EventHandler for GameState {
             }
             Selection::Inventory(player_id, ref selected_item_option) => {
                 let bounds = inventory_bbox(ctx);
-                graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
+                graphics::set_color(ctx, graphics::Color::from_rgb(127, 127, 127))?;
                 graphics::rectangle(ctx, graphics::DrawMode::Fill, bounds)?;
                 graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
                 draw_grid(ctx, bounds)?;
@@ -389,16 +398,26 @@ impl event::EventHandler for GameState {
                     .expect("Invalid inventory player")
                     .inventory;
                 let width = (bounds.w / SCALE) as usize;
-                for pt in tiles(bounds) {
-                    println!("{:?}", pt);
-                    let i = pt.x as usize + width * pt.y as usize;
-                    for inventory_cell in inventory[i].iter() {
-                        inventory_cell.item.image(&self.image_map).draw(
-                            ctx,
-                            grid_corner(pt, bounds),
-                            0.,
-                        )?;
+                for (i, inventory_cell_option) in inventory.iter().enumerate() {
+                    for inventory_cell in inventory_cell_option.iter() {
+                        let tile_space_pt = Point::new(
+                            i as i32 % INVENTORY_WIDTH as i32,
+                            i as i32 / INVENTORY_WIDTH as i32,
+                        );
+                        let pixel_space_pt = tile_space_to_pixel_space(tile_space_pt, bounds);
+                        inventory_cell
+                            .item
+                            .image(&self.image_map)
+                            .draw(ctx, pixel_space_pt, 0.)?;
                     }
+                }
+                for &i in selected_item_option {
+                    let tile_space_pt = Point::new(
+                        i as i32 % INVENTORY_WIDTH as i32,
+                        i as i32 / INVENTORY_WIDTH as i32,
+                    );
+                    let pixel_space_pt = tile_space_to_pixel_space(tile_space_pt, bounds);
+                    self.image_map.selection.draw(ctx, pixel_space_pt, 0.)?;
                 }
             }
         }

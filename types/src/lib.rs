@@ -12,6 +12,8 @@ use graph::Graph;
 use std::fmt;
 
 pub const SCALE: f32 = 100.;
+pub const INVENTORY_WIDTH: u8 = 8;
+pub const INVENTORY_HEIGHT: u8 = 4;
 
 //Why `Id<T>`s instead of some sort of reference? The fundamental problem, I think, is that a given
 //`Id<Player>` referes to multiple different `Player`s, since each `GameFrame` has a different
