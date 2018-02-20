@@ -37,6 +37,9 @@ pub fn main() {
             .expect("Could not insert player");
         game_frame
             .items
+            .insert(Point2::new(5, 5), Item::Key(Key {}));
+        game_frame
+            .items
             .insert(Point2::new(3, 3), Item::Key(Key {}));
     }
     event::run(ctx, game_state).unwrap();
