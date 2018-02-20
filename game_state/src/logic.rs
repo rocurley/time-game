@@ -58,9 +58,12 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                     .as_mut()
                     .ok_or("Tried to drop from empty inventory slot")?;
                 inventory_cell.count -= 1;
+                let item = inventory_cell.item.clone();
                 if inventory_cell.count == 0 {
                     player.inventory[item_ix as usize] = None;
                 }
+                items.insert(player.position, item);
+                players_by_id.insert(player.id, player);
             }
         }
     }

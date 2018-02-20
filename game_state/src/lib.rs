@@ -54,19 +54,6 @@ fn draw_map_grid(ctx: &mut ggez::Context) -> ggez::GameResult<()> {
     draw_grid(ctx, bounds)
 }
 
-fn grid_corner(pt: Point, bounds: graphics::Rect) -> Point2 {
-    Point2::new(
-        bounds.x + pt.x as f32 * SCALE,
-        bounds.y + pt.y as f32 * SCALE,
-    )
-}
-
-fn tiles(bounds: graphics::Rect) -> Box<Iterator<Item = Point>> {
-    let width = (bounds.w / SCALE) as i32;
-    let height = (bounds.h / SCALE) as i32;
-    Box::new((0..width).flat_map(move |x| (0..height).map(move |y| Point::new(x, y))))
-}
-
 pub struct GameState {
     pub history: tree::Zipper<GameFrame, Plan>,
     pub selected: Selection,
@@ -252,8 +239,16 @@ impl event::EventHandler for GameState {
                     }
                 }
             }
+            Selection::Inventory(player_id, Some(ix)) => {
+                if let Keycode::T = key {
+                    self.current_plan
+                        .cow(&self.history.focus.children)
+                        .moves
+                        .insert(player_id, Move::Drop(ix));
+                }
+            }
+            Selection::Inventory(_, None) => {}
             Selection::Top => {}
-            Selection::Inventory(_, _) => {}
         }
         match key {
             Keycode::Tab => if let Err(err) = self.rotate_plan() {
@@ -397,7 +392,6 @@ impl event::EventHandler for GameState {
                     .get(&player_id)
                     .expect("Invalid inventory player")
                     .inventory;
-                let width = (bounds.w / SCALE) as usize;
                 for (i, inventory_cell_option) in inventory.iter().enumerate() {
                     for inventory_cell in inventory_cell_option.iter() {
                         let tile_space_pt = Point::new(
