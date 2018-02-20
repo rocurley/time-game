@@ -4,8 +4,7 @@ extern crate nalgebra;
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use self::types::{insert_into_inventory, Direction, DoubleMap, GameFrame, Move, Plan, Player,
-                  Portal, PortalGraphNode};
+use self::types::{Direction, DoubleMap, GameFrame, Move, Plan, Player, Portal, PortalGraphNode};
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
@@ -49,19 +48,12 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 let item = items
                     .remove(&player.position)
                     .ok_or("Couln't pick up: no item")?;
-                insert_into_inventory(&mut player.inventory, item)?;
+                player.inventory.insert(item)?;
                 players_by_id.insert(player.id, player);
             }
             Some(&Move::Drop(item_ix)) => {
                 let mut player: Player = old_player.clone();
-                let mut inventory_cell = player.inventory[item_ix as usize]
-                    .as_mut()
-                    .ok_or("Tried to drop from empty inventory slot")?;
-                inventory_cell.count -= 1;
-                let item = inventory_cell.item.clone();
-                if inventory_cell.count == 0 {
-                    player.inventory[item_ix as usize] = None;
-                }
+                let item = player.inventory.drop(item_ix)?;
                 items.insert(player.position, item);
                 players_by_id.insert(player.id, player);
             }

@@ -1,3 +1,5 @@
+#![feature(nll)]
+
 extern crate ggez;
 extern crate graph;
 extern crate nalgebra;
@@ -12,8 +14,8 @@ use graph::Graph;
 use std::fmt;
 
 pub const SCALE: f32 = 100.;
-pub const INVENTORY_WIDTH: u8 = 8;
-pub const INVENTORY_HEIGHT: u8 = 4;
+pub const INVENTORY_WIDTH: usize = 8;
+pub const INVENTORY_HEIGHT: usize = 4;
 
 //Why `Id<T>`s instead of some sort of reference? The fundamental problem, I think, is that a given
 //`Id<Player>` referes to multiple different `Player`s, since each `GameFrame` has a different
@@ -160,7 +162,7 @@ pub enum Selection {
     Top,
     Player(Id<Player>),
     GridCell(Point),
-    Inventory(Id<Player>, Option<u8>),
+    Inventory(Id<Player>, Option<usize>),
 }
 
 impl Selection {
@@ -239,7 +241,7 @@ pub enum Move {
     Direction(Direction),
     Jump,
     PickUp,
-    Drop(u8),
+    Drop(usize),
 }
 
 #[derive(Clone, Debug)]
@@ -291,11 +293,22 @@ pub struct InventoryCell {
     pub count: u8,
 }
 
-pub type Inventory = [Option<InventoryCell>; 32];
+#[derive(Clone, Debug)]
+pub struct HypotheticalInventory {
+    pub cells: [Option<InventoryCell>; 32],
+    //What the player has "wished for".
+    pub constraints: HashMap<Item, usize>,
+    //The minimum number of a given type the player ever had. Assume 0.
+    //Will be subtracted from constraints when attempting to resolve.
+    pub minima: HashMap<Item, usize>,
+}
 
-pub fn insert_into_inventory(inventory: &mut Inventory, item: Item) -> Result<(), &'static str> {
+fn insert_into_cells(
+    cells: &mut [Option<InventoryCell>; 32],
+    item: Item,
+) -> Result<(), &'static str> {
     let mut fallback: Option<&mut Option<InventoryCell>> = None;
-    for slot in inventory {
+    for slot in cells {
         match slot {
             &mut None => if fallback.is_none() {
                 fallback = Some(slot)
@@ -318,6 +331,52 @@ pub fn insert_into_inventory(inventory: &mut Inventory, item: Item) -> Result<()
 }
 
 #[derive(Clone, Debug)]
+pub enum Inventory {
+    Actual([Option<InventoryCell>; 32]),
+    Hypothetical(HypotheticalInventory),
+}
+impl Inventory {
+    pub fn insert(&mut self, item: Item) -> Result<(), &'static str> {
+        insert_into_cells(self.cells_mut(), item)
+    }
+    pub fn drop(&mut self, item_ix: usize) -> Result<Item, &'static str> {
+        let inventory_cell = self.cells_mut()[item_ix]
+            .as_mut()
+            .ok_or("Tried to drop from empty inventory slot")?;
+        inventory_cell.count -= 1;
+        let item = inventory_cell.item.clone();
+        if inventory_cell.count == 0 {
+            self.cells_mut()[item_ix as usize] = None;
+        };
+        if let &mut Inventory::Hypothetical(ref mut hypothetical) = self {
+            let mut count = 0;
+            for option_cell in hypothetical.cells.iter() {
+                for cell in option_cell {
+                    if cell.item == item {
+                        count += cell.count as usize
+                    }
+                }
+            }
+            let item_min = hypothetical.minima.entry(item.clone()).or_insert(0);
+            *item_min = std::cmp::min(count, *item_min);
+        }
+        Ok(item)
+    }
+    pub fn cells(&self) -> &[Option<InventoryCell>; 32] {
+        match self {
+            &Inventory::Actual(ref cells) => cells,
+            &Inventory::Hypothetical(ref inventory) => &inventory.cells,
+        }
+    }
+    pub fn cells_mut(&mut self) -> &mut [Option<InventoryCell>; 32] {
+        match self {
+            &mut Inventory::Actual(ref mut cells) => cells,
+            &mut Inventory::Hypothetical(ref mut inventory) => &mut inventory.cells,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Player {
     pub id: Id<Player>,
     pub position: Point,
@@ -329,7 +388,7 @@ impl Player {
         Player {
             id: rand::random(),
             position,
-            inventory: Default::default(),
+            inventory: Inventory::Actual(Default::default()),
         }
     }
 }

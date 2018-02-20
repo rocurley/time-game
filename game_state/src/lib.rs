@@ -153,8 +153,7 @@ fn world_selection(pt: Point2, ctx: &ggez::Context, game_state: &GameState) -> S
 fn inventory_selection(pt: Point2, ctx: &ggez::Context, player_id: Id<Player>) -> Selection {
     let bbox = inventory_bbox(ctx);
     let inventory_space_pt = pixel_space_to_tile_space(pt, bbox);
-    let row_length = (bbox.w / SCALE).trunc() as u8;
-    let ix = inventory_space_pt.map(|pt| pt.x as u8 + pt.y as u8 * row_length);
+    let ix = inventory_space_pt.map(|pt| pt.x as usize + pt.y as usize * INVENTORY_WIDTH);
     Selection::Inventory(player_id, ix)
 }
 
@@ -392,7 +391,7 @@ impl event::EventHandler for GameState {
                     .get(&player_id)
                     .expect("Invalid inventory player")
                     .inventory;
-                for (i, inventory_cell_option) in inventory.iter().enumerate() {
+                for (i, inventory_cell_option) in inventory.cells().iter().enumerate() {
                     for inventory_cell in inventory_cell_option.iter() {
                         let tile_space_pt = Point::new(
                             i as i32 % INVENTORY_WIDTH as i32,
