@@ -378,12 +378,6 @@ impl event::EventHandler for GameState {
                 )?;
             }
             Selection::Inventory(player_id, ref selected_item_option) => {
-                let bounds = inventory_bbox(ctx);
-                graphics::set_color(ctx, graphics::Color::from_rgb(127, 127, 127))?;
-                graphics::rectangle(ctx, graphics::DrawMode::Fill, bounds)?;
-                graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
-                draw_grid(ctx, bounds)?;
-                graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
                 let inventory = &self.history
                     .get_focus_val()
                     .players
@@ -391,6 +385,16 @@ impl event::EventHandler for GameState {
                     .get(&player_id)
                     .expect("Invalid inventory player")
                     .inventory;
+                let bounds = inventory_bbox(ctx);
+                let background = match inventory {
+                    &Inventory::Actual(_) => graphics::Color::from_rgb(127, 127, 127),
+                    &Inventory::Hypothetical(_) => graphics::Color::from_rgb(127, 127, 255),
+                };
+                graphics::set_color(ctx, background)?;
+                graphics::rectangle(ctx, graphics::DrawMode::Fill, bounds)?;
+                graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
+                draw_grid(ctx, bounds)?;
+                graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
                 for (i, inventory_cell_option) in inventory.cells().iter().enumerate() {
                     for inventory_cell in inventory_cell_option.iter() {
                         let tile_space_pt = Point::new(

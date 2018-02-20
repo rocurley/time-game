@@ -4,7 +4,8 @@ extern crate nalgebra;
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use self::types::{Direction, DoubleMap, GameFrame, Move, Plan, Player, Portal, PortalGraphNode};
+use self::types::{Direction, DoubleMap, GameFrame, HypotheticalInventory, Inventory, Move, Plan,
+                  Player, Portal, PortalGraphNode};
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
@@ -60,7 +61,8 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
         }
     }
     for pos in plan.portals.iter() {
-        let player = Player::new(*pos);
+        let mut player = Player::new(*pos);
+        player.inventory = Inventory::Hypothetical(HypotheticalInventory::new());
         let player_id = player.id;
         players_by_id.insert(player_id, player);
         let portal = Portal::new(0, *pos);

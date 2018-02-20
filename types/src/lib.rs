@@ -303,6 +303,35 @@ pub struct HypotheticalInventory {
     pub minima: HashMap<Item, usize>,
 }
 
+impl HypotheticalInventory {
+    pub fn new() -> Self {
+        HypotheticalInventory {
+            cells: Default::default(),
+            constraints: HashMap::new(),
+            minima: HashMap::new(),
+        }
+    }
+    pub fn wish(&mut self, item: Item, ix: usize) -> Result<(), &'static str> {
+        match &mut self.cells[ix] {
+            cell @ &mut None => {
+                *cell = Some(InventoryCell {
+                    item: item.clone(),
+                    count: 1,
+                })
+            }
+            &mut Some(ref mut cell) => {
+                if cell.item != item {
+                    return Err("Tried to insert conflicting item");
+                }
+                cell.count += 1;
+            }
+        }
+        *self.minima.entry(item.clone()).or_insert(0) += 1;
+        *self.constraints.entry(item.clone()).or_insert(0) += 1;
+        Ok(())
+    }
+}
+
 fn insert_into_cells(
     cells: &mut [Option<InventoryCell>; 32],
     item: Item,
