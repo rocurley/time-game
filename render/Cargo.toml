@@ -1,14 +1,10 @@
 [package]
 
-name = "game_state"
+name = "render"
 version = "0.1.0"
 authors = ["Roger Curley <rocurley@gmail.com>"]
 
 [dependencies]
-tree = { path = "../tree" }
 types = { path = "../types" }
-render = { path = "../render" }
-rand = "0.4.1"
 ggez = "0.4.0-rc.2"
 nalgebra = "0.13.1"
-proptest = "0.4.0"

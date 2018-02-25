@@ -163,6 +163,8 @@ pub enum Selection {
     Player(Id<Player>),
     GridCell(Point),
     Inventory(Id<Player>, Option<usize>),
+    WishPicker(Id<Player>, usize),
+    WishPickerInventoryViewer(Id<Player>, usize, Id<Player>),
 }
 
 impl Selection {
@@ -173,6 +175,10 @@ impl Selection {
             &mut Selection::GridCell(_) => *self = Selection::Top,
             &mut Selection::Inventory(id, None) => *self = Selection::Player(id),
             &mut Selection::Inventory(id, Some(_)) => *self = Selection::Inventory(id, None),
+            &mut Selection::WishPicker(id, ix) => *self = Selection::Inventory(id, Some(ix)),
+            &mut Selection::WishPickerInventoryViewer(id, ix, _) => {
+                *self = Selection::WishPicker(id, ix)
+            }
         }
     }
 }
@@ -346,6 +352,9 @@ impl HypotheticalInventory {
         cell.count -= 1;
         *min -= 1;
         *constraint -= 1;
+        if cell.count == 0 {
+            self.cells[ix] = None
+        }
         Ok(())
     }
 }

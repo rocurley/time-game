@@ -6,6 +6,7 @@ extern crate nalgebra;
 #[macro_use]
 pub extern crate proptest;
 extern crate rand;
+extern crate render;
 extern crate tree;
 extern crate types;
 
@@ -19,40 +20,9 @@ use nalgebra::{Similarity2, Vector2};
 
 use types::*;
 
+use render::{draw_map_grid, inventory_bbox, pixel_space_to_tile_space, render_inventory};
+
 mod logic;
-
-fn draw_grid(ctx: &mut ggez::Context, bounds: graphics::Rect) -> ggez::GameResult<()> {
-    let mut x = bounds.x;
-    let mut y = bounds.y;
-    while x <= bounds.x + bounds.w {
-        graphics::line(
-            ctx,
-            &[
-                Point2::new(x, bounds.y - 2.5),
-                Point2::new(x, bounds.y + bounds.h + 2.5),
-            ],
-            5.,
-        )?;
-        x += SCALE;
-    }
-    while y <= bounds.y + bounds.h {
-        graphics::line(
-            ctx,
-            &[
-                Point2::new(bounds.x - 2.5, y),
-                Point2::new(bounds.x + bounds.w + 2.5, y),
-            ],
-            5.,
-        )?;
-        y += SCALE;
-    }
-    Ok(())
-}
-
-fn draw_map_grid(ctx: &mut ggez::Context) -> ggez::GameResult<()> {
-    let bounds = graphics::get_screen_coordinates(ctx);
-    draw_grid(ctx, bounds)
-}
 
 pub struct GameState {
     pub history: tree::Zipper<GameFrame, Plan>,
@@ -92,7 +62,9 @@ impl GameState {
                     self.selected = Selection::Player(player_id.clone());
                 }
             }
-            Selection::Inventory(player_id, _) | Selection::Player(player_id) => {
+            Selection::WishPicker(player_id, _)
+            | Selection::Inventory(player_id, _)
+            | Selection::Player(player_id) => {
                 if !self.history
                     .get_focus_val()
                     .players
@@ -102,36 +74,17 @@ impl GameState {
                     self.selected = Selection::Top;
                 }
             }
+            Selection::WishPickerInventoryViewer(player_id, ix, target_player_id) => {
+                let players = &self.history.get_focus_val().players;
+                if !players.by_id.contains_key(&player_id) {
+                    self.selected = Selection::Top;
+                }
+                if !players.by_id.contains_key(&target_player_id) {
+                    self.selected = Selection::WishPicker(player_id, ix);
+                }
+            }
         }
     }
-}
-
-fn inventory_bbox(ctx: &ggez::Context) -> graphics::Rect {
-    let screen_bounds = graphics::get_screen_coordinates(ctx);
-    let w = INVENTORY_WIDTH as f32 * SCALE;
-    let h = INVENTORY_HEIGHT as f32 * SCALE;
-    graphics::Rect {
-        x: screen_bounds.x + (screen_bounds.w - w) / 2.,
-        y: screen_bounds.y + (screen_bounds.h - h) / 2.,
-        w,
-        h,
-    }
-}
-
-fn pixel_space_to_tile_space(pt: Point2, bbox: ggez::graphics::Rect) -> Option<Point> {
-    if !bbox.contains(pt) {
-        return None;
-    }
-    let graphics::Rect { x: x0, y: y0, .. } = bbox;
-    let inv_transform: Similarity2<f32> =
-        Similarity2::new(Vector2::new(x0, y0), 0., SCALE).inverse();
-    Some(nalgebra::try_convert::<Point2, nalgebra::Point2<i32>>(inv_transform * pt).unwrap())
-}
-
-fn tile_space_to_pixel_space(pt: Point, bbox: graphics::Rect) -> Point2 {
-    let graphics::Rect { x: x0, y: y0, .. } = bbox;
-    let transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
-    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt)
 }
 
 fn world_selection(pt: Point2, ctx: &ggez::Context, game_state: &GameState) -> Selection {
@@ -171,9 +124,74 @@ impl event::EventHandler for GameState {
     ) {
         if let event::MouseButton::Left = button {
             let pt = Point2::new(x as f32, y as f32);
-            self.selected = match self.selected {
-                Selection::Inventory(player_id, _) => inventory_selection(pt, ctx, player_id),
-                _ => world_selection(pt, ctx, self),
+            match self.selected {
+                Selection::Inventory(player_id, _) => {
+                    self.selected = inventory_selection(pt, ctx, player_id);
+                }
+                Selection::WishPicker(player_id, ix) => match world_selection(pt, ctx, self) {
+                    Selection::GridCell(tile_pt) => {
+                        let frame = self.history.get_focus_val_mut();
+                        for item in frame.items.get(&tile_pt) {
+                            let player = frame
+                                .players
+                                .by_id
+                                .get_mut(&player_id)
+                                .expect("Selection player id invalid");
+                            match player.inventory {
+                                Inventory::Actual(_) => panic!("Wishing from actual inventory"),
+                                Inventory::Hypothetical(ref mut hypothetical) => match hypothetical
+                                    .wish(item.clone(), ix)
+                                {
+                                    Ok(()) => {
+                                        self.selected = Selection::Inventory(player_id, Some(ix))
+                                    }
+                                    Err(err) => println!("{}", err),
+                                },
+                            }
+                        }
+                    }
+                    Selection::Player(target_player_id) => {
+                        self.selected =
+                            Selection::WishPickerInventoryViewer(player_id, ix, target_player_id);
+                    }
+                    _ => panic!("Invalid selection type returned from `world_selection`"),
+                },
+                Selection::WishPickerInventoryViewer(player_id, ix, target_player_id) => {
+                    match inventory_selection(pt, ctx, target_player_id) {
+                        Selection::Inventory(_, ix_option) => for ix in ix_option {
+                            let frame = self.history.get_focus_val_mut();
+                            let target_player = frame
+                                .players
+                                .by_id
+                                .get(&target_player_id)
+                                .expect("Selection target player id invalid");
+                            if let Some(cell) = target_player.inventory.cells()[ix].as_ref() {
+                                let item = cell.item.clone();
+                                let player = frame
+                                    .players
+                                    .by_id
+                                    .get_mut(&player_id)
+                                    .expect("Selection player id invalid");
+                                match player.inventory {
+                                    Inventory::Actual(_) => panic!("Wishing from actual inventory"),
+                                    Inventory::Hypothetical(ref mut hypothetical) => {
+                                        match hypothetical.wish(item, ix) {
+                                            Ok(()) => {
+                                                self.selected =
+                                                    Selection::Inventory(player_id, Some(ix))
+                                            }
+                                            Err(err) => println!("{}", err),
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        _ => panic!("Invalid selection type returned from `inventory_selection`"),
+                    }
+                }
+                _ => {
+                    self.selected = world_selection(pt, ctx, self);
+                }
             }
         }
     }
@@ -238,16 +256,48 @@ impl event::EventHandler for GameState {
                     }
                 }
             }
-            Selection::Inventory(player_id, Some(ix)) => {
-                if let Keycode::T = key {
+            Selection::Inventory(player_id, Some(ix)) => match key {
+                Keycode::T => {
                     self.current_plan
                         .cow(&self.history.focus.children)
                         .moves
                         .insert(player_id, Move::Drop(ix));
                 }
-            }
+                Keycode::Equals => {
+                    let player = self.history
+                        .get_focus_val_mut()
+                        .players
+                        .by_id
+                        .get_mut(&player_id)
+                        .expect("Invalid player selection");
+                    if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory {
+                        match hypothetical.cells[ix] {
+                            Some(ref cell) => hypothetical
+                                .wish(cell.item.clone(), ix)
+                                .unwrap_or_else(|err| println!("{}", err)),
+                            None => self.selected = Selection::WishPicker(player_id, ix),
+                        }
+                    }
+                }
+                Keycode::Minus => {
+                    let player = self.history
+                        .get_focus_val_mut()
+                        .players
+                        .by_id
+                        .get_mut(&player_id)
+                        .expect("Invalid player selection");
+                    if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory {
+                        hypothetical
+                            .unwish(ix)
+                            .unwrap_or_else(|err| println!("{}", err));
+                    }
+                }
+                x => {}
+            },
             Selection::Inventory(_, None) => {}
-            Selection::Top => {}
+            Selection::Top
+            | Selection::WishPicker(_, _)
+            | Selection::WishPickerInventoryViewer(_, _, _) => {}
         }
         match key {
             Keycode::Tab => if let Err(err) = self.rotate_plan() {
@@ -364,7 +414,7 @@ impl event::EventHandler for GameState {
                     0.,
                 )?;
             }
-            Selection::Player(player_id) => {
+            Selection::Player(player_id) | Selection::WishPicker(player_id, _) => {
                 let player = self.history
                     .get_focus_val()
                     .players
@@ -385,44 +435,17 @@ impl event::EventHandler for GameState {
                     .get(&player_id)
                     .expect("Invalid inventory player")
                     .inventory;
-                let bounds = inventory_bbox(ctx);
-                let background = match inventory {
-                    &Inventory::Actual(_) => graphics::Color::from_rgb(127, 127, 127),
-                    &Inventory::Hypothetical(_) => graphics::Color::from_rgb(127, 127, 255),
-                };
-                graphics::set_color(ctx, background)?;
-                graphics::rectangle(ctx, graphics::DrawMode::Fill, bounds)?;
-                graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
-                draw_grid(ctx, bounds)?;
-                graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
-                for (i, inventory_cell_option) in inventory.cells().iter().enumerate() {
-                    for inventory_cell in inventory_cell_option.iter() {
-                        let tile_space_pt = Point::new(
-                            i as i32 % INVENTORY_WIDTH as i32,
-                            i as i32 / INVENTORY_WIDTH as i32,
-                        );
-                        let pixel_space_pt = tile_space_to_pixel_space(tile_space_pt, bounds);
-                        inventory_cell
-                            .item
-                            .image(&self.image_map)
-                            .draw(ctx, pixel_space_pt, 0.)?;
-                        let text = graphics::Text::new(
-                            ctx,
-                            &inventory_cell.count.to_string(),
-                            &ctx.default_font.clone(),
-                        )?;
-                        graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
-                        text.draw(ctx, pixel_space_pt + Vector2::new(5., 5.), 0.0)?;
-                    }
-                }
-                for &i in selected_item_option {
-                    let tile_space_pt = Point::new(
-                        i as i32 % INVENTORY_WIDTH as i32,
-                        i as i32 / INVENTORY_WIDTH as i32,
-                    );
-                    let pixel_space_pt = tile_space_to_pixel_space(tile_space_pt, bounds);
-                    self.image_map.selection.draw(ctx, pixel_space_pt, 0.)?;
-                }
+                render_inventory(inventory, ctx, &self.image_map, selected_item_option)?;
+            }
+            Selection::WishPickerInventoryViewer(player_id, ix, target_player_id) => {
+                let inventory = &self.history
+                    .get_focus_val()
+                    .players
+                    .by_id
+                    .get(&target_player_id)
+                    .expect("Invalid inventory player")
+                    .inventory;
+                render_inventory(inventory, ctx, &self.image_map, &None)?;
             }
         }
         graphics::present(ctx);
