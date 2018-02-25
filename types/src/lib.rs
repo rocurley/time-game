@@ -330,6 +330,24 @@ impl HypotheticalInventory {
         *self.constraints.entry(item.clone()).or_insert(0) += 1;
         Ok(())
     }
+    pub fn unwish(&mut self, ix: usize) -> Result<(), &'static str> {
+        let cell = self.cells[ix]
+            .as_mut()
+            .ok_or("Can't un-wish: empty inventory cell")?;
+        let item = &cell.item;
+        let min = self.minima.entry(item.clone()).or_insert(0);
+        if *min == 0 {
+            return Err("Can't un-wish: minimum value 0");
+        }
+        let constraint = self.constraints.entry(item.clone()).or_insert(0);
+        if *constraint == 0 {
+            return Err("Can't un-wish: never wished in the first place");
+        }
+        cell.count -= 1;
+        *min -= 1;
+        *constraint -= 1;
+        Ok(())
+    }
 }
 
 fn insert_into_cells(
