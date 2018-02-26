@@ -156,7 +156,7 @@ impl event::EventHandler for GameState {
                     }
                     _ => panic!("Invalid selection type returned from `world_selection`"),
                 },
-                Selection::WishPickerInventoryViewer(player_id, ix, target_player_id) => {
+                Selection::WishPickerInventoryViewer(player_id, _ix, target_player_id) => {
                     match inventory_selection(pt, ctx, target_player_id) {
                         Selection::Inventory(_, ix_option) => for ix in ix_option {
                             let frame = self.history.get_focus_val_mut();
@@ -292,7 +292,7 @@ impl event::EventHandler for GameState {
                             .unwrap_or_else(|err| println!("{}", err));
                     }
                 }
-                x => {}
+                _ => {}
             },
             Selection::Inventory(_, None) => {}
             Selection::Top
@@ -437,7 +437,7 @@ impl event::EventHandler for GameState {
                     .inventory;
                 render_inventory(inventory, ctx, &self.image_map, selected_item_option)?;
             }
-            Selection::WishPickerInventoryViewer(player_id, ix, target_player_id) => {
+            Selection::WishPickerInventoryViewer(_player_id, _ix, target_player_id) => {
                 let inventory = &self.history
                     .get_focus_val()
                     .players
