@@ -103,7 +103,7 @@ pub fn render_inventory(
             let text = graphics::Text::new(
                 ctx,
                 &inventory_cell.count.to_string(),
-                &ctx.default_font.clone(),
+                & ctx.default_font.clone(),
             )?;
             graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
             text.draw(ctx, pixel_space_pt + Vector2::new(5., 5.), 0.0)?;
