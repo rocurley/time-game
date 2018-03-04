@@ -8,5 +8,5 @@ authors = ["Roger Curley <rocurley@gmail.com>"]
 tree = { path = "../tree" }
 graph = { path = "../graph" }
 rand = "0.4.1"
-ggez = "0.4.0-rc.2"
+ggez = { path = "../../ggez"}
 nalgebra = "0.13.1"

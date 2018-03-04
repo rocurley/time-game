@@ -9,6 +9,6 @@ types = { path = "types" }
 game_state = { path = "game_state" }
 render = { path = "render" }
 
-ggez = "0.4.0-rc.2"
+ggez = { path = "../ggez"}
 
 [workspace]

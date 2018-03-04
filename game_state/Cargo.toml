@@ -9,6 +9,6 @@ tree = { path = "../tree" }
 types = { path = "../types" }
 render = { path = "../render" }
 rand = "0.4.1"
-ggez = "0.4.0-rc.2"
+ggez = { path = "../../ggez" }
 nalgebra = "0.13.1"
 proptest = "0.4.0"
