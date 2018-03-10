@@ -26,48 +26,67 @@ You have two scrying spells:
 Probably "all in your head": using the results of spatial scrying to predict the (local) future.
 Increased cost as you predict farther out, since you need exponentially higher resolution.
 
-
-
-
 Indistinguishable Objects
 =========================
 
-Say that we only have indistinguishable objects here. Over time, we see:
+(Define loop free coloring)
 
-1 -> 2
-2 -> 2
-2 -> 3
+When all the portals are closed, we want to ensure that the portal graph has a loop-free coloring.
+But more than that, we'd like to ensure that the player is never "doomed":
+they're never in a position where the game won't let them advance because it would force a loop coloring.
+Surprisingly, we get this for free by just enforcing the loop-free coloring condition online.
+To prove this, we need to show that every graph with a loop-free coloring
+can be legally modified to have no open portals,
+and still posess a loop-free coloring.
+If a coloring is loop-free, all we need to do to preserve that is avoid connecting a worldline to itself.
+If you want to close a portal,
+you need to connect the ends of worldlines to the start of the worldlines originating from the portal.
+This will always be possible as long as the worldline's end isn't the only end that exists.
+But if any worldlines originate from Start, this will never happen.
+In other words, if there were any original instances of the object,
+and there exists a loop-free coloring, the player is not doomed.
 
-This can be "unrolled" in two different ways:
+We'd like to defer adding hypothetical objects to the graph
+until they're reified by closing their spawn portal.
+Say there exists a valid coloring if you track hypothetical objects.
+What happens when you remove the hypothetical objects?
+Obviously removing worldlines cannot introduce a loop: so far so good.
+Say you have a loop-free coloring without the hypothetical worldlines drawn in.
+Drawing in the hypothetical worldlines does two things:
+it creates new worldlines fromn the portal to the player's current location.
+This obviously does not create loops, since the player's worldline is loop-free.
+It also traces the worldlines of dropped objects back to the portal.
+This cannot create loops, since the portal has no incomming worldlines (it's still open).
 
-1 -> 2 -> 3 , 2 -> 2 (no escape for 2nd one)
-1 -> 2 -> 2 -> 3 (escapes to 3)
+Therefore, the hypothetical-free graph has a loop-free coloring iff the full graph has one.
 
-How can we tell these apart?
+When the hypothetical player is reified, can we recover the hypothetical worldlines?
+This seems streightforward: we draw the correct number of worldlines out of the portal,
+terminating one whenever we encounter a node where an item "spawned" from a hypothetical object.
 
-For every object that comes out of a portal, we have an edge in and an edge out.
-Imagine each edge as having a "color" corresponding its identity. We want to color the edges so that every node (except the start and end points) have the color coming in the same number of times as out. You can't have any loops, which I guess means that every color trail has to escape.
+Say every vertex in the portal graph has a path to Escape,
+yet the current "coloring" of worldlines has loops.
+Pick a loop. It must touch another worldline, either a loop or an escaping line.
+If it doesn't touch either, it won't be connected to escape at all.
+In either case, you can "splice" the loop into the other line, and reduce the count of loops by 1.
+Iterating on this procedure removes all the loops.
+This means that there always exists a loop-free coloring of the portal graph
+when every vertex has a path to Escape.
 
-Obviously the correct number of color trails is the number of the thing that existed at the start. Is that enough to prevent bad solves? I think it is. You can't make a loop because you don't have enough trails. 
+Thus far, we've assumed an edge for every object.
+Since at this point we only care about graph connectivity,
+we can simplify our representation by merging adjacent edges.
 
-So in the initial scenario, you start with one object. Two of them appear out of the portal (here labeled 2).
-When resolving the portal, one of them went to
-
-
-Say the start and end are the same point S. Everything that existed before the first portal was created starts at S. Everything around after the portal dies ends at S. Now the question is: can you draw the whole graph without lfiting your pencil?
-
-Anytime you resolve all the portals, it should check that that's the case.
-If the graph is connected, can this ever fail to be the case?
-
-No! Say you have a cycle. Since the graph is connected there's a node where the cycle abutts some other path. Break the cycle and splice it into the path. Repeat until there are no cycles.
-
-Can you detect if the configuration is invalid "online", as soon as it becomes unsolvable?
-
-Say in the intermediate state, you track each existing thing as an edge to `Escape`. When you create a portal, it will create a node for that portal, with an edge to `Escape`. The portal will be connected to the rest of the graph by the `Escape` edge.
-
-When the portal is created, its input edges don't exist. You can't really be doomed until you fill those edges in, since until then you can always connect the graph back together by running something to the input edge. If you have a subgraph that isn't otherwise connected (that is to say, its only connection to the rest is through "escape"), no edges from the rest of the graph ave filled those edges in. This means that the number of edges to "escape" equals the number of open slots, so as long as there are edges to "escape" an otherwise disconnected graph can be connected. By the same argument, if a graph is completely disconnected it can't have any free openings, and is this doomed.
-
-Therefore, a graph is not doomed iff it's connected, under the scheme where free edges are linked to "escape".
+We'd also like to be able to check that the entire graph is connected to escape as cheaply as possible.
+But we don't want to recheck the entire graph every time.
+If we assume that our current state is fully connected to Escape,
+we can use that information to check our sucessor state more easily.
+When we alter the portal graph,
+we're taking some edges that used to go to Escape and pointing them somewhere else.
+If wherever those edges are now pointing can reach Escape,
+every node that transitively relied on them is still able to reach Escape.
+This lets us check the continued connectivity of the portal graph to Escape
+without rechecking the entire graph.
 
 Player
 ======
