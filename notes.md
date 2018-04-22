@@ -21,6 +21,7 @@ Maybe they can send messages to the future or something, but as far as they're c
 You are *not* from the time guild: You're from the perception guild or something?
 They specalize in scrying, which turns out to be the actual hard pert of time travel.
 You have two scrying spells:
+
 * Spatial scrying (why you can see through walls)
 * Temporal scrying (how you can predict the future.
 Probably "all in your head": using the results of spatial scrying to predict the (local) future.
@@ -29,7 +30,38 @@ Increased cost as you predict farther out, since you need exponentially higher r
 Indistinguishable Objects
 =========================
 
-(Define loop free coloring)
+We want to enforce a notion that objects can't spawn "out of nowhere": that is to say,
+you can't pull the master sword out of a portal and satisfy the loop by sticking it back in.
+This is basically for gameplay reasons: it would be really overpowered.
+
+But to actually implement this, we need a definiton that we can actually check in the game.
+To do this, we can draw a graph representing the worldline of the object,
+once all the portals are closed.
+Vertices are one of:
+
+* Portals: An object that goes through a portal is two edges,
+  one going into the portal (in the future), and one going out (in the past).
+* Start: An object that existed at the start of the level is an edge leaving Start.
+* End: An object that lives until the end of the level is an edge terminating at End.
+
+Given this graph, you've violated this condition if the graph has a cycle.
+If you want to track multiple objects in the same graph, you can assign each object a "color".
+In that case, the condition becomes that there's no _monochromatic_ cycle.
+
+The difficulty comes about with indistinguishable objects.
+If the player has 3 rocks, and they toss one through a portal,
+we don't want them to have to decide _which_ rock it was.
+So if we maintain one graph for each type of object
+(with no colors, because we can't tell which object is which),
+we our condition becomes:
+
+Does there exist a loop-free coloring of the graph:
+can we assign colors to the edges of the graph such that there are no monochromatic cycles.
+This coloring is subject to some rules about how each vertex works:
+
+* Portal nodes with an inbound edge of a given color
+  have a corresponding outbound edge of the same color, and vice versa.
+* No edge goes into Start or comes out of End.
 
 When all the portals are closed, we want to ensure that the portal graph has a loop-free coloring.
 But more than that, we'd like to ensure that the player is never "doomed":
