@@ -63,25 +63,6 @@ pub enum PortalGraphNode {
 
 type PortalGraph = Graph<PortalGraphNode, Id<Player>>;
 
-#[derive(Clone, Debug)]
-pub struct GameCell {
-    pub player: Option<Id<Player>>,
-    pub portal: Option<Id<Portal>>,
-    pub item: Option<Item>,
-}
-
-impl GameCell {
-    pub fn new() -> Self {
-        GameCell {
-            player: None,
-            portal: None,
-            item: None,
-        }
-    }
-    pub fn is_empty(&self) -> bool {
-        return self.player.is_none() && self.portal.is_none() && self.item.is_none();
-    }
-}
 
 type IdMap<T> = HashMap<Id<T>, T>;
 
