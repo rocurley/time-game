@@ -359,6 +359,18 @@ impl HypotheticalInventory {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct ActualInventory {
+    pub cells: [Option<InventoryCell>; 32],
+}
+impl ActualInventory {
+    pub fn new() -> Self {
+        ActualInventory {
+            cells: Default::default(),
+        }
+    }
+}
+
 fn insert_into_cells(
     cells: &mut [Option<InventoryCell>; 32],
     item: Item,
@@ -388,7 +400,7 @@ fn insert_into_cells(
 
 #[derive(Clone, Debug)]
 pub enum Inventory {
-    Actual([Option<InventoryCell>; 32]),
+    Actual(ActualInventory),
     Hypothetical(HypotheticalInventory),
 }
 impl Inventory {
@@ -420,13 +432,13 @@ impl Inventory {
     }
     pub fn cells(&self) -> &[Option<InventoryCell>; 32] {
         match self {
-            &Inventory::Actual(ref cells) => cells,
+            &Inventory::Actual(ref inventory) => &inventory.cells,
             &Inventory::Hypothetical(ref inventory) => &inventory.cells,
         }
     }
     pub fn cells_mut(&mut self) -> &mut [Option<InventoryCell>; 32] {
         match self {
-            &mut Inventory::Actual(ref mut cells) => cells,
+            &mut Inventory::Actual(ref mut inventory) => &mut inventory.cells,
             &mut Inventory::Hypothetical(ref mut inventory) => &mut inventory.cells,
         }
     }
@@ -444,7 +456,7 @@ impl Player {
         Player {
             id: rand::random(),
             position,
-            inventory: Inventory::Actual(Default::default()),
+            inventory: Inventory::Actual(ActualInventory::new()),
         }
     }
 }
