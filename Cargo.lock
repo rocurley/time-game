@@ -827,6 +827,14 @@ version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "portal_graph"
+version = "0.1.0"
+dependencies = [
+ "graph 0.1.0",
+ "types 0.1.0",
+]
+
+[[package]]
 name = "proptest"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1089,6 +1097,7 @@ version = "0.1.0"
 dependencies = [
  "game_state 0.1.0",
  "ggez 0.4.0",
+ "portal_graph 0.1.0",
  "render 0.1.0",
  "tree 0.1.0",
  "types 0.1.0",

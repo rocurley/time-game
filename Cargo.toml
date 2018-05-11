@@ -8,6 +8,7 @@ tree = { path = "tree" }
 types = { path = "types" }
 game_state = { path = "game_state" }
 render = { path = "render" }
+portal_graph = { path = "portal_graph" }
 
 ggez = { path = "../ggez"}
 
