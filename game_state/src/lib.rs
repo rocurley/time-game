@@ -131,7 +131,7 @@ impl event::EventHandler for GameState {
                 Selection::WishPicker(player_id, ix) => match world_selection(pt, ctx, self) {
                     Selection::GridCell(tile_pt) => {
                         let frame = self.history.get_focus_val_mut();
-                        for item in frame.items.get(&tile_pt) {
+                        for item_drop in frame.items.get_by_position(&tile_pt) {
                             let player = frame
                                 .players
                                 .by_id
@@ -140,7 +140,7 @@ impl event::EventHandler for GameState {
                             match player.inventory {
                                 Inventory::Actual(_) => panic!("Wishing from actual inventory"),
                                 Inventory::Hypothetical(ref mut hypothetical) => match hypothetical
-                                    .wish(item.clone(), ix)
+                                    .wish(item_drop.item.clone(), ix)
                                 {
                                     Ok(()) => {
                                         self.selected = Selection::Inventory(player_id, Some(ix))
@@ -398,10 +398,10 @@ impl event::EventHandler for GameState {
                 0.,
             )?;
         }
-        for (pt, item) in self.history.get_focus_val().items.iter() {
-            item.image(&self.image_map).draw(
+        for (_, item_drop) in self.history.get_focus_val().items.iter() {
+            item_drop.item.image(&self.image_map).draw(
                 ctx,
-                transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(*pt),
+                transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(item_drop.position),
                 0.,
             )?;
         }

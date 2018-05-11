@@ -2,8 +2,8 @@ extern crate types;
 
 extern crate nalgebra;
 
-use self::types::{Direction, DoubleMap, GameFrame, HypotheticalInventory, Inventory, Move, Plan,
-                  Player, Portal, PortalGraphNode};
+use self::types::{Direction, DoubleMap, GameFrame, HypotheticalInventory, Inventory, ItemDrop,
+                  Move, Plan, Player, Portal, PortalGraphNode};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
@@ -46,16 +46,17 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
             }
             Some(&Move::PickUp) => {
                 let mut player: Player = old_player.clone();
-                let item = items
-                    .remove(&player.position)
+                let item_drop = items
+                    .remove_by_position(&player.position)
                     .ok_or("Couln't pick up: no item")?;
-                player.inventory.insert(item)?;
+                player.inventory.insert(item_drop.item)?;
                 players_by_id.insert(player.id, player);
             }
             Some(&Move::Drop(item_ix)) => {
                 let mut player: Player = old_player.clone();
                 let item = player.inventory.drop(item_ix)?;
-                items.insert(player.position, item);
+                let item_drop = ItemDrop::new(item, player.position);
+                items.insert(item_drop)?;
                 players_by_id.insert(player.id, player);
             }
         }
@@ -67,7 +68,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
         players_by_id.insert(player_id, player);
         let portal = Portal::new(0, *pos);
         let portal_id = portal.id;
-        portals.insert(*pos, portal)?;
+        portals.insert(portal)?;
         portal_graph.insert_node(
             PortalGraphNode::Portal(portal_id),
             Vec::new(),

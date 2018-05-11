@@ -2,7 +2,7 @@ extern crate game_state;
 extern crate types;
 
 use game_state::GameState;
-use types::{Item, Key, Player};
+use types::{Item, ItemDrop, Key, Player};
 
 extern crate ggez;
 use ggez::*;
@@ -37,10 +37,12 @@ pub fn main() {
             .expect("Could not insert player");
         game_frame
             .items
-            .insert(Point2::new(5, 5), Item::Key(Key {}));
+            .insert(ItemDrop::new(Item::Key(Key {}), Point2::new(5, 5)))
+            .expect("Could not insert item");
         game_frame
             .items
-            .insert(Point2::new(3, 3), Item::Key(Key {}));
+            .insert(ItemDrop::new(Item::Key(Key {}), Point2::new(3, 3)))
+            .expect("Could not insert item");
     }
     event::run(ctx, game_state).unwrap();
 }

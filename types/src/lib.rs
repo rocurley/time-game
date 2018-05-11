@@ -9,7 +9,7 @@ extern crate tree;
 use ggez::graphics;
 use graph::Graph;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -77,35 +77,80 @@ impl<T> DoubleMap<T> {
             by_position: HashMap::new(),
         }
     }
+    pub fn iter<'a, 'b: 'a>(&'b self) -> hash_map::Iter<'a, Id<T>, T> {
+        self.by_id.iter()
+    }
+    pub fn get_by_id<'a, 'b: 'a>(&'b self, id: &Id<T>) -> Option<&'a T> {
+        self.by_id.get(id)
+    }
+    pub fn get_by_position<'a, 'b: 'a>(&'b self, pos: &Point) -> Option<&'a T> {
+        self.by_position
+            .get(pos)
+            .map(|id| self.by_id.get(id).expect("DoubleMap inconsistent"))
+    }
+    pub fn remove_by_position(&mut self, pos: &Point) -> Option<T> {
+        self.by_position
+            .remove(pos)
+            .map(|id| self.by_id.remove(&id).expect("DoubleMap inconsistent"))
+    }
 }
-impl DoubleMap<Portal> {
-    pub fn insert(&mut self, pos: Point, portal: Portal) -> Result<(), &'static str> {
-        match self.by_position.entry(pos) {
-            Entry::Occupied(_) => return Err("Portal position occupied"),
-            Entry::Vacant(position_entry) => match self.by_id.entry(portal.id) {
-                Entry::Occupied(_) => return Err("Portal id already exists"),
+
+impl<T> DoubleMap<T>
+where
+    T: DoubleMappable,
+{
+    pub fn insert(&mut self, t: T) -> Result<(), &'static str> {
+        match self.by_position.entry(t.position()) {
+            Entry::Occupied(_) => return Err("Position occupied"),
+            Entry::Vacant(position_entry) => match self.by_id.entry(t.id()) {
+                Entry::Occupied(_) => return Err("Id already exists"),
                 Entry::Vacant(mut id_entry) => {
-                    position_entry.insert(portal.id);
-                    id_entry.insert(portal);
+                    position_entry.insert(t.id());
+                    id_entry.insert(t);
                     Ok(())
                 }
             },
         }
     }
+    pub fn remove_by_id(&mut self, id: &Id<T>) -> Option<T> {
+        self.by_id.remove(id).map(|t| {
+            self.by_position
+                .remove(&t.position())
+                .expect("DoubleMap inconsistent");
+            t
+        })
+    }
 }
-impl DoubleMap<Player> {
-    pub fn insert(&mut self, player: Player) -> Result<(), &'static str> {
-        match self.by_position.entry(player.position) {
-            Entry::Occupied(_) => return Err("Player position occupied"),
-            Entry::Vacant(position_entry) => match self.by_id.entry(player.id) {
-                Entry::Occupied(_) => return Err("Player id already exists"),
-                Entry::Vacant(mut id_entry) => {
-                    position_entry.insert(player.id);
-                    id_entry.insert(player);
-                    Ok(())
-                }
-            },
-        }
+
+pub trait DoubleMappable: Sized {
+    fn position(&self) -> Point;
+    fn id(&self) -> Id<Self>;
+}
+
+impl DoubleMappable for Portal {
+    fn position(&self) -> Point {
+        self.player_position
+    }
+    fn id(&self) -> Id<Portal> {
+        self.id
+    }
+}
+
+impl DoubleMappable for Player {
+    fn position(&self) -> Point {
+        self.position
+    }
+    fn id(&self) -> Id<Player> {
+        self.id
+    }
+}
+
+impl DoubleMappable for ItemDrop {
+    fn position(&self) -> Point {
+        self.position
+    }
+    fn id(&self) -> Id<ItemDrop> {
+        self.id
     }
 }
 
@@ -113,7 +158,7 @@ impl DoubleMap<Player> {
 pub struct GameFrame {
     pub players: DoubleMap<Player>,
     pub portals: DoubleMap<Portal>,
-    pub items: HashMap<Point, Item>,
+    pub items: DoubleMap<ItemDrop>,
     pub portal_graph: PortalGraph,
 }
 impl fmt::Debug for GameFrame {
@@ -131,7 +176,7 @@ impl GameFrame {
         GameFrame {
             players: DoubleMap::new(),
             portals: DoubleMap::new(),
-            items: HashMap::new(),
+            items: DoubleMap::new(),
             portal_graph: Graph::new(),
         }
     }
@@ -460,6 +505,22 @@ pub struct Key {}
 impl Key {
     pub fn image<'a>(&self, image_map: &'a ImageMap) -> &'a graphics::Image {
         &image_map.key
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ItemDrop {
+    pub id: Id<ItemDrop>,
+    pub position: Point,
+    pub item: Item,
+}
+impl ItemDrop {
+    pub fn new(item: Item, position: Point) -> Self {
+        ItemDrop {
+            id: rand::random(),
+            item,
+            position,
+        }
     }
 }
 
