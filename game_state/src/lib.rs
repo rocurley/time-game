@@ -10,8 +10,8 @@ extern crate render;
 extern crate tree;
 extern crate types;
 
-use ggez::{event, graphics};
 use ggez::graphics::Point2;
+use ggez::{event, graphics};
 use graphics::Drawable;
 
 use std::f32::consts::PI;

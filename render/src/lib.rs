@@ -5,8 +5,8 @@ extern crate nalgebra;
 extern crate types;
 
 use ggez::graphics;
-use graphics::Point2;
 use graphics::Drawable;
+use graphics::Point2;
 
 use nalgebra::{Similarity2, Vector2};
 
@@ -101,11 +101,7 @@ pub fn render_inventory(
                 .image(image_map)
                 .draw(ctx, pixel_space_pt, 0.)?;
             let font = ctx.default_font.clone();
-            let text = graphics::Text::new(
-                ctx,
-                &inventory_cell.count.to_string(),
-                & font,
-            )?;
+            let text = graphics::Text::new(ctx, &inventory_cell.count.to_string(), &font)?;
             graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
             text.draw(ctx, pixel_space_pt + Vector2::new(5., 5.), 0.0)?;
         }

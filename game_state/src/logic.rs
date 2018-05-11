@@ -2,10 +2,10 @@ extern crate types;
 
 extern crate nalgebra;
 
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use self::types::{Direction, DoubleMap, GameFrame, HypotheticalInventory, Inventory, Move, Plan,
                   Player, Portal, PortalGraphNode};
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
@@ -94,12 +94,12 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
 }
 #[cfg(test)]
 mod tests {
-    use logic::apply_plan;
-    use std::collections::HashSet;
     use super::super::proptest;
-    use proptest::prelude::*;
     use super::types::{Direction, GameFrame, Move, Plan, Player};
+    use logic::apply_plan;
     use nalgebra::Point2;
+    use proptest::prelude::*;
+    use std::collections::HashSet;
 
     static POSSIBLE_MOVES: [Move; 5] = [
         Move::Jump,
@@ -130,7 +130,7 @@ mod tests {
         });
         let portals = prop_oneof![
             4 => Just(HashSet::new()),
-            1 => 
+            1 =>
         (proptest::num::i32::ANY, proptest::num::i32::ANY)
             .prop_map(|(x, y)| {
                 let mut portals = HashSet::new();

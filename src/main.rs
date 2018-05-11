@@ -1,8 +1,8 @@
 extern crate game_state;
 extern crate types;
 
-use types::{Item, Key, Player};
 use game_state::GameState;
+use types::{Item, Key, Player};
 
 extern crate ggez;
 use ggez::*;

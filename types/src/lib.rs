@@ -6,12 +6,12 @@ extern crate nalgebra;
 extern crate rand;
 extern crate tree;
 
-use std::collections::{HashMap, HashSet};
-use std::collections::hash_map::Entry;
 use ggez::graphics;
-use std::marker::PhantomData;
 use graph::Graph;
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::marker::PhantomData;
 
 pub const SCALE: f32 = 100.;
 pub const INVENTORY_WIDTH: usize = 8;
@@ -62,7 +62,6 @@ pub enum PortalGraphNode {
 }
 
 type PortalGraph = Graph<PortalGraphNode, Id<Player>>;
-
 
 type IdMap<T> = HashMap<Id<T>, T>;
 

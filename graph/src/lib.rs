@@ -1,6 +1,6 @@
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
-use std::collections::hash_map::Entry;
 
 pub struct Node<'a, N: 'a, E: 'a> {
     pub val: N,
