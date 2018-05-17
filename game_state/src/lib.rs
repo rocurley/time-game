@@ -125,22 +125,21 @@ impl event::EventHandler for GameState {
                 Selection::WishPicker(player_id, ix) => match world_selection(pt, ctx, self) {
                     Selection::GridCell(tile_pt) => {
                         let frame = self.history.get_focus_val_mut();
-                        for item_drop in frame.items.get_by_position(&tile_pt) {
-                            let player = frame
-                                .players
-                                .by_id
-                                .get_mut(&player_id)
-                                .expect("Selection player id invalid");
-                            match player.inventory {
-                                Inventory::Actual(_) => panic!("Wishing from actual inventory"),
-                                Inventory::Hypothetical(ref mut hypothetical) => match hypothetical
-                                    .wish(item_drop.item.clone(), ix)
-                                {
-                                    Ok(()) => {
-                                        self.selected = Selection::Inventory(player_id, Some(ix))
+                        let selection = &mut self.selected;
+                        if let Some(item_drop) = frame.items.get_by_position(&tile_pt) {
+                            let wish_result = frame.players.mutate_by_id(
+                                &player_id,
+                                |mut player| match player.inventory {
+                                    Inventory::Actual(_) => panic!("Wishing from actual inventory"),
+                                    Inventory::Hypothetical(ref mut hypothetical) => {
+                                        hypothetical.wish(item_drop.item.clone(), ix)?;
+                                        *selection = Selection::Inventory(player_id, Some(ix));
+                                        Ok(player)
                                     }
-                                    Err(err) => println!("{}", err),
                                 },
+                            );
+                            if let Err(err) = wish_result {
+                                println!("{}", err)
                             }
                         }
                     }
@@ -154,29 +153,28 @@ impl event::EventHandler for GameState {
                     match inventory_selection(pt, ctx, target_player_id) {
                         Selection::Inventory(_, ix_option) => for ix in ix_option {
                             let frame = self.history.get_focus_val_mut();
+                            let selection = &mut self.selected;
                             let target_player = frame
                                 .players
-                                .by_id
-                                .get(&target_player_id)
+                                .get_by_id(&target_player_id)
                                 .expect("Selection target player id invalid");
                             if let Some(cell) = target_player.inventory.cells()[ix].as_ref() {
                                 let item = cell.item.clone();
-                                let player = frame
-                                    .players
-                                    .by_id
-                                    .get_mut(&player_id)
-                                    .expect("Selection player id invalid");
-                                match player.inventory {
-                                    Inventory::Actual(_) => panic!("Wishing from actual inventory"),
-                                    Inventory::Hypothetical(ref mut hypothetical) => {
-                                        match hypothetical.wish(item, ix) {
-                                            Ok(()) => {
-                                                self.selected =
-                                                    Selection::Inventory(player_id, Some(ix))
-                                            }
-                                            Err(err) => println!("{}", err),
+                                let wish_result = frame.players.mutate_by_id(
+                                    &player_id,
+                                    |mut player| match player.inventory {
+                                        Inventory::Actual(_) => {
+                                            panic!("Wishing from actual inventory")
                                         }
-                                    }
+                                        Inventory::Hypothetical(ref mut hypothetical) => {
+                                            hypothetical.wish(item, ix)?;
+                                            *selection = Selection::Inventory(player_id, Some(ix));
+                                            Ok(player)
+                                        }
+                                    },
+                                );
+                                if let Err(err) = wish_result {
+                                    println!("{}", err)
                                 }
                             }
                         },
@@ -258,32 +256,37 @@ impl event::EventHandler for GameState {
                         .insert(player_id, Move::Drop(ix));
                 }
                 Keycode::Equals => {
-                    let player = self.history
-                        .get_focus_val_mut()
-                        .players
-                        .by_id
-                        .get_mut(&player_id)
-                        .expect("Invalid player selection");
-                    if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory {
-                        match hypothetical.cells[ix] {
-                            Some(ref cell) => hypothetical
-                                .wish(cell.item.clone(), ix)
-                                .unwrap_or_else(|err| println!("{}", err)),
-                            None => self.selected = Selection::WishPicker(player_id, ix),
-                        }
+                    let selection = &mut self.selected;
+                    let wish_result = self.history.get_focus_val_mut().players.mutate_by_id(
+                        &player_id,
+                        |mut player| {
+                            if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory
+                            {
+                                match hypothetical.cells[ix] {
+                                    Some(ref cell) => hypothetical.wish(cell.item.clone(), ix)?,
+                                    None => *selection = Selection::WishPicker(player_id, ix),
+                                }
+                            }
+                            Ok(player)
+                        },
+                    );
+                    if let Err(err) = wish_result {
+                        println!("{}", err)
                     }
                 }
                 Keycode::Minus => {
-                    let player = self.history
-                        .get_focus_val_mut()
-                        .players
-                        .by_id
-                        .get_mut(&player_id)
-                        .expect("Invalid player selection");
-                    if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory {
-                        hypothetical
-                            .unwish(ix)
-                            .unwrap_or_else(|err| println!("{}", err));
+                    let wish_result = self.history.get_focus_val_mut().players.mutate_by_id(
+                        &player_id,
+                        |mut player| {
+                            if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory
+                            {
+                                hypothetical.unwish(ix)?
+                            }
+                            Ok(player)
+                        },
+                    );
+                    if let Err(err) = wish_result {
+                        println!("{}", err)
                     }
                 }
                 _ => {}
@@ -338,7 +341,7 @@ impl event::EventHandler for GameState {
         graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
         draw_map_grid(ctx)?;
         graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
-        for player in self.history.get_focus_val().players.by_id.values() {
+        for (_, player) in self.history.get_focus_val().players.iter() {
             self.image_map.player.draw(
                 ctx,
                 transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
@@ -384,7 +387,7 @@ impl event::EventHandler for GameState {
                 )?;
             }
         }
-        for portal in self.history.get_focus_val().portals.by_id.values() {
+        for (_, portal) in self.history.get_focus_val().portals.iter() {
             self.image_map.portal.draw(
                 ctx,
                 transform
@@ -412,8 +415,7 @@ impl event::EventHandler for GameState {
                 let player = self.history
                     .get_focus_val()
                     .players
-                    .by_id
-                    .get(&player_id)
+                    .get_by_id(&player_id)
                     .expect("Invalid player selection");
                 self.image_map.selection.draw(
                     ctx,
@@ -425,8 +427,7 @@ impl event::EventHandler for GameState {
                 let inventory = &self.history
                     .get_focus_val()
                     .players
-                    .by_id
-                    .get(&player_id)
+                    .get_by_id(&player_id)
                     .expect("Invalid inventory player")
                     .inventory;
                 render_inventory(inventory, ctx, &self.image_map, selected_item_option)?;
@@ -435,8 +436,7 @@ impl event::EventHandler for GameState {
                 let inventory = &self.history
                     .get_focus_val()
                     .players
-                    .by_id
-                    .get(&target_player_id)
+                    .get_by_id(&target_player_id)
                     .expect("Invalid inventory player")
                     .inventory;
                 render_inventory(inventory, ctx, &self.image_map, &None)?;

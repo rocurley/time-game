@@ -4,18 +4,16 @@ extern crate nalgebra;
 
 use self::types::{Direction, DoubleMap, GameFrame, HypotheticalInventory, Inventory, ItemDrop,
                   Move, Plan, Player, Portal, PortalGraphNode};
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
     let mut portal_graph = initial_frame.portal_graph.clone();
     let mut items = initial_frame.items.clone();
-    let mut players_by_id = HashMap::new();
-    for old_player in initial_frame.players.by_id.values() {
+    let mut players = DoubleMap::new();
+    for (_, old_player) in initial_frame.players.iter() {
         match plan.moves.get(&old_player.id) {
             None => {
-                players_by_id.insert(old_player.id, old_player.clone());
+                players.insert(old_player.clone())?;
             }
             Some(&Move::Direction(ref direction)) => {
                 let mut player: Player = old_player.clone();
@@ -26,19 +24,17 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                     Direction::Right => nalgebra::Vector2::x(),
                 };
                 player.position += delta;
-                players_by_id.insert(player.id, player);
+                players.insert(player)?;
             }
             Some(&Move::Jump) => {
-                let portal_id = portals
-                    .by_position
-                    .remove(&old_player.position)
+                let portal = portals
+                    .remove_by_position(&old_player.position)
                     .ok_or("Tried to close loop at wrong position")?;
-                portals.by_id.remove(&portal_id);
                 portal_graph
                     .edges
-                    .insert(old_player.id, PortalGraphNode::Portal(portal_id));
+                    .insert(old_player.id, PortalGraphNode::Portal(portal.id));
                 if !portal_graph
-                    .get_node(PortalGraphNode::Portal(portal_id))
+                    .get_node(PortalGraphNode::Portal(portal.id))
                     .connected_to(PortalGraphNode::End)
                 {
                     return Err("Created infinite loop");
@@ -50,14 +46,14 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                     .remove_by_position(&player.position)
                     .ok_or("Couln't pick up: no item")?;
                 player.inventory.insert(item_drop.item)?;
-                players_by_id.insert(player.id, player);
+                players.insert(player)?;
             }
             Some(&Move::Drop(item_ix)) => {
                 let mut player: Player = old_player.clone();
                 let item = player.inventory.drop(item_ix)?;
                 let item_drop = ItemDrop::new(item, player.position);
                 items.insert(item_drop)?;
-                players_by_id.insert(player.id, player);
+                players.insert(player)?;
             }
         }
     }
@@ -65,7 +61,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
         let mut player = Player::new(*pos);
         player.inventory = Inventory::Hypothetical(HypotheticalInventory::new());
         let player_id = player.id;
-        players_by_id.insert(player_id, player);
+        players.insert(player)?;
         let portal = Portal::new(0, *pos);
         let portal_id = portal.id;
         portals.insert(portal)?;
@@ -74,17 +70,6 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
             Vec::new(),
             vec![(PortalGraphNode::End, player_id)],
         );
-    }
-    let mut players = DoubleMap {
-        by_id: players_by_id,
-        by_position: HashMap::new(),
-    };
-    for player in players.by_id.values() {
-        if let Entry::Vacant(entry) = players.by_position.entry(player.position) {
-            entry.insert(player.id);
-        } else {
-            return Err("Player collision");
-        }
     }
     Ok(GameFrame {
         players,

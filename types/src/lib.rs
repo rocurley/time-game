@@ -65,19 +65,13 @@ type PortalGraph = Graph<PortalGraphNode, Id<Player>>;
 
 type IdMap<T> = HashMap<Id<T>, T>;
 
-pub struct DoubleMapEntry<'a, T> {
-    pub id: Id<T>,
-    pub position: Point,
-    pub entry: &'a T,
-}
-
 #[derive(Clone, Debug)]
 pub struct DoubleMap<T> {
-    by_id: IdMap<(Point, T)>,
+    by_id: IdMap<T>,
     by_position: HashMap<Point, Id<T>>,
 }
 impl<T> DoubleMap<T> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         DoubleMap {
             by_id: HashMap::new(),
             by_position: HashMap::new(),
@@ -131,6 +125,14 @@ where
                 .expect("DoubleMap inconsistent");
             t
         })
+    }
+    pub fn mutate_by_id<F>(&mut self, id: &Id<T>, f: F) -> Result<(), &'static str>
+    where
+        F: FnOnce(T) -> Result<T, &'static str>,
+    {
+        let t_orig = self.remove_by_id(id).ok_or("Id missing")?;
+        let t_final = f(t_orig)?;
+        self.insert(t_final)
     }
 }
 
