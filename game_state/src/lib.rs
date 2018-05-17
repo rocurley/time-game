@@ -58,28 +58,23 @@ impl GameState {
         match self.selected {
             Selection::Top => {}
             Selection::GridCell(pt) => {
-                if let Some(player_id) = self.history.get_focus_val().players.by_position.get(&pt) {
-                    self.selected = Selection::Player(player_id.clone());
+                if let Some(player_id) = self.history.get_focus_val().players.id_by_position(&pt) {
+                    self.selected = Selection::Player(player_id);
                 }
             }
             Selection::WishPicker(player_id, _)
             | Selection::Inventory(player_id, _)
             | Selection::Player(player_id) => {
-                if !self.history
-                    .get_focus_val()
-                    .players
-                    .by_id
-                    .contains_key(&player_id)
-                {
+                if !self.history.get_focus_val().players.contains_id(&player_id) {
                     self.selected = Selection::Top;
                 }
             }
             Selection::WishPickerInventoryViewer(player_id, ix, target_player_id) => {
                 let players = &self.history.get_focus_val().players;
-                if !players.by_id.contains_key(&player_id) {
+                if !players.contains_id(&player_id) {
                     self.selected = Selection::Top;
                 }
-                if !players.by_id.contains_key(&target_player_id) {
+                if !players.contains_id(&target_player_id) {
                     self.selected = Selection::WishPicker(player_id, ix);
                 }
             }
@@ -95,10 +90,9 @@ fn world_selection(pt: Point2, ctx: &ggez::Context, game_state: &GameState) -> S
         .history
         .get_focus_val()
         .players
-        .by_position
-        .get(&world_space_pt);
+        .id_by_position(&world_space_pt);
     match player {
-        Some(id) => Selection::Player(id.clone()),
+        Some(id) => Selection::Player(id),
         None => Selection::GridCell(world_space_pt),
     }
 }

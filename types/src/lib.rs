@@ -65,10 +65,16 @@ type PortalGraph = Graph<PortalGraphNode, Id<Player>>;
 
 type IdMap<T> = HashMap<Id<T>, T>;
 
+pub struct DoubleMapEntry<'a, T> {
+    pub id: Id<T>,
+    pub position: Point,
+    pub entry: &'a T,
+}
+
 #[derive(Clone, Debug)]
 pub struct DoubleMap<T> {
-    pub by_id: IdMap<T>,
-    pub by_position: HashMap<Point, Id<T>>,
+    by_id: IdMap<(Point, T)>,
+    by_position: HashMap<Point, Id<T>>,
 }
 impl<T> DoubleMap<T> {
     fn new() -> Self {
@@ -79,6 +85,9 @@ impl<T> DoubleMap<T> {
     }
     pub fn iter<'a, 'b: 'a>(&'b self) -> hash_map::Iter<'a, Id<T>, T> {
         self.by_id.iter()
+    }
+    pub fn contains_id(&self, id: &Id<T>) -> bool {
+        self.by_id.contains_key(id)
     }
     pub fn get_by_id<'a, 'b: 'a>(&'b self, id: &Id<T>) -> Option<&'a T> {
         self.by_id.get(id)
@@ -92,6 +101,9 @@ impl<T> DoubleMap<T> {
         self.by_position
             .remove(pos)
             .map(|id| self.by_id.remove(&id).expect("DoubleMap inconsistent"))
+    }
+    pub fn id_by_position(&self, pos: &Point) -> Option<Id<T>> {
+        self.by_position.get(pos).map(|id| id.clone())
     }
 }
 
