@@ -104,13 +104,12 @@ mod tests {
     fn valid_plan(game_frame: GameFrame) -> BoxedStrategy<Plan> {
         let moves = proptest::collection::vec(
             proptest::sample::select(POSSIBLE_MOVES.as_ref()),
-            (game_frame.players.by_id.len()..game_frame.players.by_id.len() + 1),
+            game_frame.players.len()..game_frame.players.len() + 1,
         ).prop_map(move |moves_vec| {
             game_frame
                 .players
-                .by_id
-                .keys()
-                .map(|id| id.clone())
+                .iter()
+                .map(|(id, _)| id.clone())
                 .zip(moves_vec.into_iter())
                 .collect()
         });
@@ -160,34 +159,11 @@ mod tests {
             .boxed()
     }
 
-    fn check_frame_consistency(game_frame: &GameFrame) {
-        for (pt, player_id) in game_frame.players.by_position.iter() {
-            assert_eq!(
-                game_frame.players.by_id.get(player_id).unwrap().position,
-                *pt
-            )
-        }
-        assert_eq!(
-            game_frame.players.by_id.len(),
-            game_frame.players.by_position.len()
-        );
-        assert_eq!(
-            game_frame.portals.by_id.len(),
-            game_frame.portals.by_position.len()
-        );
-    }
-
     proptest!{
-        #[test]
-        fn test_insert_player(ref player in arbitrary_player()) {
-            let mut frame = GameFrame::new();
-            frame.players.insert(player.clone()).expect("Failed to insert player");
-            check_frame_consistency(& frame);
-        }
         #[test]
         fn test_apply_plan(ref game_frames in unfold_arbitrary_plans(10)) {
             for frame in game_frames.iter() {
-                check_frame_consistency(frame)
+                prop_assert_eq!(frame.players.len() - frame.portals.len(), 1)
             }
         }
     }

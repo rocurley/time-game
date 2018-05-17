@@ -99,6 +99,9 @@ impl<T> DoubleMap<T> {
     pub fn id_by_position(&self, pos: &Point) -> Option<Id<T>> {
         self.by_position.get(pos).map(|id| id.clone())
     }
+    pub fn len(&self) -> usize {
+        self.by_id.len()
+    }
 }
 
 impl<T> DoubleMap<T>
