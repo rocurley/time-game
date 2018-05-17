@@ -80,6 +80,77 @@ impl GameState {
             }
         }
     }
+    fn left_click_event(
+        &mut self,
+        ctx: &mut ggez::Context,
+        pt: Point2,
+    ) -> Result<(), &'static str> {
+        match self.selected {
+            Selection::Inventory(player_id, _) => {
+                self.selected = inventory_selection(pt, ctx, player_id);
+                Ok(())
+            }
+            Selection::WishPicker(player_id, ix) => match world_selection(pt, ctx, self) {
+                Selection::GridCell(tile_pt) => {
+                    let frame = self.history.get_focus_val_mut();
+                    let selection = &mut self.selected;
+                    if let Some(item_drop) = frame.items.get_by_position(&tile_pt) {
+                        frame.players.mutate_by_id(&player_id, |mut player| {
+                            match player.inventory {
+                                Inventory::Actual(_) => panic!("Wishing from actual inventory"),
+                                Inventory::Hypothetical(ref mut hypothetical) => {
+                                    hypothetical.wish(item_drop.item.clone(), ix)?;
+                                    *selection = Selection::Inventory(player_id, Some(ix));
+                                    Ok(player)
+                                }
+                            }
+                        })
+                    } else {
+                        Ok(())
+                    }
+                }
+                Selection::Player(target_player_id) => {
+                    self.selected =
+                        Selection::WishPickerInventoryViewer(player_id, ix, target_player_id);
+                    Ok(())
+                }
+                _ => panic!("Invalid selection type returned from `world_selection`"),
+            },
+            Selection::WishPickerInventoryViewer(player_id, _ix, target_player_id) => {
+                match inventory_selection(pt, ctx, target_player_id) {
+                    Selection::Inventory(_, None) => Ok(()),
+                    Selection::Inventory(_, Some(ix)) => {
+                        let frame = self.history.get_focus_val_mut();
+                        let selection = &mut self.selected;
+                        let target_player = frame
+                            .players
+                            .get_by_id(&target_player_id)
+                            .expect("Selection target player id invalid");
+                        if let Some(cell) = target_player.inventory.cells()[ix].as_ref() {
+                            let item = cell.item.clone();
+                            frame.players.mutate_by_id(&player_id, |mut player| {
+                                match player.inventory {
+                                    Inventory::Actual(_) => panic!("Wishing from actual inventory"),
+                                    Inventory::Hypothetical(ref mut hypothetical) => {
+                                        hypothetical.wish(item, ix)?;
+                                        *selection = Selection::Inventory(player_id, Some(ix));
+                                        Ok(player)
+                                    }
+                                }
+                            })
+                        } else {
+                            Ok(())
+                        }
+                    }
+                    _ => panic!("Invalid selection type returned from `inventory_selection`"),
+                }
+            }
+            _ => {
+                self.selected = world_selection(pt, ctx, self);
+                Ok(())
+            }
+        }
+    }
 }
 
 fn world_selection(pt: Point2, ctx: &ggez::Context, game_state: &GameState) -> Selection {
@@ -116,75 +187,13 @@ impl event::EventHandler for GameState {
         x: i32,
         y: i32,
     ) {
-        if let event::MouseButton::Left = button {
-            let pt = Point2::new(x as f32, y as f32);
-            match self.selected {
-                Selection::Inventory(player_id, _) => {
-                    self.selected = inventory_selection(pt, ctx, player_id);
-                }
-                Selection::WishPicker(player_id, ix) => match world_selection(pt, ctx, self) {
-                    Selection::GridCell(tile_pt) => {
-                        let frame = self.history.get_focus_val_mut();
-                        let selection = &mut self.selected;
-                        if let Some(item_drop) = frame.items.get_by_position(&tile_pt) {
-                            let wish_result = frame.players.mutate_by_id(
-                                &player_id,
-                                |mut player| match player.inventory {
-                                    Inventory::Actual(_) => panic!("Wishing from actual inventory"),
-                                    Inventory::Hypothetical(ref mut hypothetical) => {
-                                        hypothetical.wish(item_drop.item.clone(), ix)?;
-                                        *selection = Selection::Inventory(player_id, Some(ix));
-                                        Ok(player)
-                                    }
-                                },
-                            );
-                            if let Err(err) = wish_result {
-                                println!("{}", err)
-                            }
-                        }
-                    }
-                    Selection::Player(target_player_id) => {
-                        self.selected =
-                            Selection::WishPickerInventoryViewer(player_id, ix, target_player_id);
-                    }
-                    _ => panic!("Invalid selection type returned from `world_selection`"),
-                },
-                Selection::WishPickerInventoryViewer(player_id, _ix, target_player_id) => {
-                    match inventory_selection(pt, ctx, target_player_id) {
-                        Selection::Inventory(_, ix_option) => for ix in ix_option {
-                            let frame = self.history.get_focus_val_mut();
-                            let selection = &mut self.selected;
-                            let target_player = frame
-                                .players
-                                .get_by_id(&target_player_id)
-                                .expect("Selection target player id invalid");
-                            if let Some(cell) = target_player.inventory.cells()[ix].as_ref() {
-                                let item = cell.item.clone();
-                                let wish_result = frame.players.mutate_by_id(
-                                    &player_id,
-                                    |mut player| match player.inventory {
-                                        Inventory::Actual(_) => {
-                                            panic!("Wishing from actual inventory")
-                                        }
-                                        Inventory::Hypothetical(ref mut hypothetical) => {
-                                            hypothetical.wish(item, ix)?;
-                                            *selection = Selection::Inventory(player_id, Some(ix));
-                                            Ok(player)
-                                        }
-                                    },
-                                );
-                                if let Err(err) = wish_result {
-                                    println!("{}", err)
-                                }
-                            }
-                        },
-                        _ => panic!("Invalid selection type returned from `inventory_selection`"),
-                    }
-                }
-                _ => {
-                    self.selected = world_selection(pt, ctx, self);
-                }
-            }
+        let pt = Point2::new(x as f32, y as f32);
+        let result = match button {
+            event::MouseButton::Left => self.left_click_event(ctx, pt),
+            _ => Ok(()),
+        };
+        if let Err(msg) = result {
+            println!("{}", msg)
         }
     }
     fn key_down_event(
