@@ -1,9 +1,13 @@
+extern crate game_frame;
+extern crate portal_graph;
 extern crate types;
 
 extern crate nalgebra;
 
-use self::types::{Direction, DoubleMap, GameFrame, HypotheticalInventory, Inventory, ItemDrop,
-                  Move, Plan, Player, Portal, PortalGraphNode};
+use self::game_frame::GameFrame;
+use self::portal_graph::PlayerPortalGraphNode;
+use self::types::{Direction, DoubleMap, HypotheticalInventory, Inventory, ItemDrop, Move, Plan,
+                  Player, Portal};
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
@@ -32,10 +36,10 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                     .ok_or("Tried to close loop at wrong position")?;
                 portal_graph
                     .edges
-                    .insert(old_player.id, PortalGraphNode::Portal(portal.id));
+                    .insert(old_player.id, PlayerPortalGraphNode::Portal(portal.id));
                 if !portal_graph
-                    .get_node(PortalGraphNode::Portal(portal.id))
-                    .connected_to(PortalGraphNode::End)
+                    .get_node(PlayerPortalGraphNode::Portal(portal.id))
+                    .connected_to(PlayerPortalGraphNode::End)
                 {
                     return Err("Created infinite loop");
                 }
@@ -66,9 +70,9 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
         let portal_id = portal.id;
         portals.insert(portal)?;
         portal_graph.insert_node(
-            PortalGraphNode::Portal(portal_id),
+            PlayerPortalGraphNode::Portal(portal_id),
             Vec::new(),
-            vec![(PortalGraphNode::End, player_id)],
+            vec![(PlayerPortalGraphNode::End, player_id)],
         );
     }
     Ok(GameFrame {

@@ -5,6 +5,7 @@ extern crate nalgebra;
 #[cfg(test)]
 #[macro_use]
 pub extern crate proptest;
+extern crate game_frame;
 extern crate rand;
 extern crate render;
 extern crate tree;
@@ -18,6 +19,7 @@ use std::f32::consts::PI;
 
 use nalgebra::{Similarity2, Vector2};
 
+use game_frame::*;
 use types::*;
 
 use render::{draw_map_grid, inventory_bbox, pixel_space_to_tile_space, render_inventory};
