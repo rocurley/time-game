@@ -6,12 +6,13 @@ extern crate nalgebra;
 
 use self::game_frame::GameFrame;
 use self::portal_graph::PlayerPortalGraphNode;
-use self::types::{Direction, DoubleMap, HypotheticalInventory, Inventory, ItemDrop, Move, Plan,
-                  Player, Portal};
+use self::types::{
+    Direction, DoubleMap, HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal,
+};
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
-    let mut portal_graph = initial_frame.portal_graph.clone();
+    let mut player_portal_graph = initial_frame.player_portal_graph.clone();
     let mut items = initial_frame.items.clone();
     let mut players = DoubleMap::new();
     for (_, old_player) in initial_frame.players.iter() {
@@ -34,10 +35,10 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 let portal = portals
                     .remove_by_position(&old_player.position)
                     .ok_or("Tried to close loop at wrong position")?;
-                portal_graph
+                player_portal_graph
                     .edges
                     .insert(old_player.id, PlayerPortalGraphNode::Portal(portal.id));
-                if !portal_graph
+                if !player_portal_graph
                     .get_node(PlayerPortalGraphNode::Portal(portal.id))
                     .connected_to(PlayerPortalGraphNode::End)
                 {
@@ -69,7 +70,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
         let portal = Portal::new(0, *pos);
         let portal_id = portal.id;
         portals.insert(portal)?;
-        portal_graph.insert_node(
+        player_portal_graph.insert_node(
             PlayerPortalGraphNode::Portal(portal_id),
             Vec::new(),
             vec![(PlayerPortalGraphNode::End, player_id)],
@@ -79,7 +80,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
         players,
         portals,
         items,
-        portal_graph,
+        player_portal_graph,
     })
 }
 #[cfg(test)]

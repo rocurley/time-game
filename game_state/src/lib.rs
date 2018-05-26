@@ -242,7 +242,8 @@ impl event::EventHandler for GameState {
             }
             Selection::GridCell(pt) => {
                 if let Keycode::Q = key {
-                    if self.current_plan
+                    if self
+                        .current_plan
                         .get(&self.history.focus.children)
                         .portals
                         .contains(&pt)
@@ -358,7 +359,8 @@ impl event::EventHandler for GameState {
                 transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
                 0.,
             )?;
-            for mv in self.current_plan
+            for mv in self
+                .current_plan
                 .get(&self.history.focus.children)
                 .moves
                 .get(&player.id)
@@ -423,7 +425,8 @@ impl event::EventHandler for GameState {
                 )?;
             }
             Selection::Player(player_id) | Selection::WishPicker(player_id, _) => {
-                let player = self.history
+                let player = self
+                    .history
                     .get_focus_val()
                     .players
                     .get_by_id(&player_id)
@@ -435,7 +438,8 @@ impl event::EventHandler for GameState {
                 )?;
             }
             Selection::Inventory(player_id, ref selected_item_option) => {
-                let inventory = &self.history
+                let inventory = &self
+                    .history
                     .get_focus_val()
                     .players
                     .get_by_id(&player_id)
@@ -444,7 +448,8 @@ impl event::EventHandler for GameState {
                 render_inventory(inventory, ctx, &self.image_map, selected_item_option)?;
             }
             Selection::WishPickerInventoryViewer(_player_id, _ix, target_player_id) => {
-                let inventory = &self.history
+                let inventory = &self
+                    .history
                     .get_focus_val()
                     .players
                     .get_by_id(&target_player_id)

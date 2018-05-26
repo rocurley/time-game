@@ -7,12 +7,11 @@ use portal_graph::PlayerPortalGraph;
 use std::fmt;
 use types::{DoubleMap, ItemDrop, Player, Portal};
 
-#[derive(Clone)]
 pub struct GameFrame {
     pub players: DoubleMap<Player>,
     pub portals: DoubleMap<Portal>,
     pub items: DoubleMap<ItemDrop>,
-    pub portal_graph: PlayerPortalGraph,
+    pub player_portal_graph: PlayerPortalGraph,
 }
 impl fmt::Debug for GameFrame {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -30,7 +29,7 @@ impl GameFrame {
             players: DoubleMap::new(),
             portals: DoubleMap::new(),
             items: DoubleMap::new(),
-            portal_graph: Graph::new(),
+            player_portal_graph: Graph::new(),
         }
     }
 }
