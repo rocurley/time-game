@@ -7,7 +7,9 @@ authors = ["Roger Curley <rocurley@gmail.com>"]
 [dependencies]
 tree = { path = "../tree" }
 types = { path = "../types" }
+game_frame = { path = "../game_frame" }
 render = { path = "../render" }
+portal_graph = { path = "../portal_graph" }
 rand = "0.4.1"
 ggez = { path = "../../ggez" }
 nalgebra = "0.13.1"

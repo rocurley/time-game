@@ -19,7 +19,8 @@ where
         let edges = self.graph.nodes.get(&self.val).expect("Invalid node state");
         Box::new(edges.iter().map(move |edge| {
             Node {
-                val: self.graph
+                val: self
+                    .graph
                     .edges
                     .get(edge)
                     .expect("Invalid graph state")

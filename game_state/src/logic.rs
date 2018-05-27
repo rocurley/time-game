@@ -1,13 +1,19 @@
+extern crate game_frame;
+extern crate portal_graph;
 extern crate types;
 
 extern crate nalgebra;
 
-use self::types::{Direction, DoubleMap, GameFrame, HypotheticalInventory, Inventory, ItemDrop,
-                  Move, Plan, Player, Portal, PortalGraphNode};
+use self::game_frame::GameFrame;
+use self::portal_graph::PlayerPortalGraphNode;
+use self::types::{
+    Direction, DoubleMap, HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal,
+};
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
-    let mut portal_graph = initial_frame.portal_graph.clone();
+    let mut player_portal_graph = initial_frame.player_portal_graph.clone();
+    let mut item_portal_graphs = initial_frame.item_portal_graphs.clone();
     let mut items = initial_frame.items.clone();
     let mut players = DoubleMap::new();
     for (_, old_player) in initial_frame.players.iter() {
@@ -30,12 +36,12 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 let portal = portals
                     .remove_by_position(&old_player.position)
                     .ok_or("Tried to close loop at wrong position")?;
-                portal_graph
+                player_portal_graph
                     .edges
-                    .insert(old_player.id, PortalGraphNode::Portal(portal.id));
-                if !portal_graph
-                    .get_node(PortalGraphNode::Portal(portal.id))
-                    .connected_to(PortalGraphNode::End)
+                    .insert(old_player.id, PlayerPortalGraphNode::Portal(portal.id));
+                if !player_portal_graph
+                    .get_node(PlayerPortalGraphNode::Portal(portal.id))
+                    .connected_to(PlayerPortalGraphNode::End)
                 {
                     return Err("Created infinite loop");
                 }
@@ -65,23 +71,25 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
         let portal = Portal::new(0, *pos);
         let portal_id = portal.id;
         portals.insert(portal)?;
-        portal_graph.insert_node(
-            PortalGraphNode::Portal(portal_id),
+        player_portal_graph.insert_node(
+            PlayerPortalGraphNode::Portal(portal_id),
             Vec::new(),
-            vec![(PortalGraphNode::End, player_id)],
+            vec![(PlayerPortalGraphNode::End, player_id)],
         );
     }
     Ok(GameFrame {
         players,
         portals,
         items,
-        portal_graph,
+        player_portal_graph,
+        item_portal_graphs,
     })
 }
 #[cfg(test)]
 mod tests {
     use super::super::proptest;
-    use super::types::{Direction, GameFrame, Move, Plan, Player};
+    use super::game_frame::GameFrame;
+    use super::types::{Direction, Move, Plan, Player};
     use logic::apply_plan;
     use nalgebra::Point2;
     use proptest::prelude::*;

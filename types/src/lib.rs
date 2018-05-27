@@ -1,13 +1,11 @@
 #![feature(nll)]
 
 extern crate ggez;
-extern crate graph;
 extern crate nalgebra;
 extern crate rand;
 extern crate tree;
 
 use ggez::graphics;
-use graph::Graph;
 use std::collections::hash_map::Entry;
 use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
@@ -53,15 +51,6 @@ impl<T> fmt::Debug for Id<T> {
         write!(f, "Id::new({})", self.0)
     }
 }
-
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
-pub enum PortalGraphNode {
-    Beginning,
-    Portal(Id<Portal>),
-    End,
-}
-
-type PortalGraph = Graph<PortalGraphNode, Id<Player>>;
 
 type IdMap<T> = HashMap<Id<T>, T>;
 
@@ -113,7 +102,7 @@ where
             Entry::Occupied(_) => return Err("Position occupied"),
             Entry::Vacant(position_entry) => match self.by_id.entry(t.id()) {
                 Entry::Occupied(_) => return Err("Id already exists"),
-                Entry::Vacant(mut id_entry) => {
+                Entry::Vacant(id_entry) => {
                     position_entry.insert(t.id());
                     id_entry.insert(t);
                     Ok(())
@@ -168,34 +157,6 @@ impl DoubleMappable for ItemDrop {
     }
     fn id(&self) -> Id<ItemDrop> {
         self.id
-    }
-}
-
-#[derive(Clone)]
-pub struct GameFrame {
-    pub players: DoubleMap<Player>,
-    pub portals: DoubleMap<Portal>,
-    pub items: DoubleMap<ItemDrop>,
-    pub portal_graph: PortalGraph,
-}
-impl fmt::Debug for GameFrame {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "GameFrame{{ players:{:?}, portals:{:?}, items:{:?}, portal_graph:???}}",
-            self.players, self.portals, self.items
-        )
-    }
-}
-
-impl GameFrame {
-    pub fn new() -> Self {
-        GameFrame {
-            players: DoubleMap::new(),
-            portals: DoubleMap::new(),
-            items: DoubleMap::new(),
-            portal_graph: Graph::new(),
-        }
     }
 }
 
