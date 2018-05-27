@@ -13,6 +13,7 @@ use self::types::{
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
     let mut player_portal_graph = initial_frame.player_portal_graph.clone();
+    let mut item_portal_graphs = initial_frame.item_portal_graphs.clone();
     let mut items = initial_frame.items.clone();
     let mut players = DoubleMap::new();
     for (_, old_player) in initial_frame.players.iter() {
@@ -81,12 +82,14 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
         portals,
         items,
         player_portal_graph,
+        item_portal_graphs,
     })
 }
 #[cfg(test)]
 mod tests {
     use super::super::proptest;
-    use super::types::{Direction, GameFrame, Move, Plan, Player};
+    use super::game_frame::GameFrame;
+    use super::types::{Direction, Move, Plan, Player};
     use logic::apply_plan;
     use nalgebra::Point2;
     use proptest::prelude::*;
@@ -109,13 +112,12 @@ mod tests {
     fn valid_plan(game_frame: GameFrame) -> BoxedStrategy<Plan> {
         let moves = proptest::collection::vec(
             proptest::sample::select(POSSIBLE_MOVES.as_ref()),
-            (game_frame.players.by_id.len()..game_frame.players.by_id.len() + 1),
+            game_frame.players.len()..game_frame.players.len() + 1,
         ).prop_map(move |moves_vec| {
             game_frame
                 .players
-                .by_id
-                .keys()
-                .map(|id| id.clone())
+                .iter()
+                .map(|(id, _)| id.clone())
                 .zip(moves_vec.into_iter())
                 .collect()
         });

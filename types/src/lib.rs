@@ -88,6 +88,9 @@ impl<T> DoubleMap<T> {
     pub fn id_by_position(&self, pos: &Point) -> Option<Id<T>> {
         self.by_position.get(pos).map(|id| id.clone())
     }
+    pub fn len(&self) -> usize {
+        self.by_id.len()
+    }
 }
 
 impl<T> DoubleMap<T>
@@ -99,7 +102,7 @@ where
             Entry::Occupied(_) => return Err("Position occupied"),
             Entry::Vacant(position_entry) => match self.by_id.entry(t.id()) {
                 Entry::Occupied(_) => return Err("Id already exists"),
-                Entry::Vacant(mut id_entry) => {
+                Entry::Vacant(id_entry) => {
                     position_entry.insert(t.id());
                     id_entry.insert(t);
                     Ok(())
