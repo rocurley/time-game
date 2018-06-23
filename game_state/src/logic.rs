@@ -1,4 +1,5 @@
 extern crate game_frame;
+extern crate petgraph;
 extern crate portal_graph;
 extern crate types;
 
@@ -13,7 +14,7 @@ use self::types::{
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
     let mut player_portal_graph = initial_frame.player_portal_graph.clone();
-    let mut item_portal_graphs = initial_frame.item_portal_graphs.clone();
+    let item_portal_graphs = initial_frame.item_portal_graphs.clone();
     let mut items = initial_frame.items.clone();
     let mut players = DoubleMap::new();
     for (_, old_player) in initial_frame.players.iter() {
@@ -36,13 +37,27 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 let portal = portals
                     .remove_by_position(&old_player.position)
                     .ok_or("Tried to close loop at wrong position")?;
-                player_portal_graph
-                    .edges
-                    .insert(old_player.id, PlayerPortalGraphNode::Portal(portal.id));
-                if !player_portal_graph
-                    .get_node(PlayerPortalGraphNode::Portal(portal.id))
-                    .connected_to(PlayerPortalGraphNode::End)
-                {
+                let mut player_node = PlayerPortalGraphNode::Beginning;
+                loop {
+                    for (_, target, edge) in player_portal_graph.edges(player_node) {
+                        if *edge == old_player.id {
+                            player_node = target;
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                player_portal_graph.add_edge(
+                    player_node,
+                    PlayerPortalGraphNode::Portal(portal.id),
+                    old_player.id,
+                );
+                if !petgraph::algo::has_path_connecting(
+                    &player_portal_graph,
+                    PlayerPortalGraphNode::Portal(portal.id),
+                    PlayerPortalGraphNode::End,
+                    None,
+                ) {
                     return Err("Created infinite loop");
                 }
             }
@@ -71,10 +86,10 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
         let portal = Portal::new(0, *pos);
         let portal_id = portal.id;
         portals.insert(portal)?;
-        player_portal_graph.insert_node(
+        player_portal_graph.add_edge(
             PlayerPortalGraphNode::Portal(portal_id),
-            Vec::new(),
-            vec![(PlayerPortalGraphNode::End, player_id)],
+            PlayerPortalGraphNode::End,
+            player_id,
         );
     }
     Ok(GameFrame {
@@ -174,5 +189,19 @@ mod tests {
                 prop_assert_eq!(frame.players.len() - frame.portals.len(), 1)
             }
         }
+    }
+    #[test]
+    fn test_loop() {
+        let game_frame_0 = GameFrame::new();
+        let mut plan_0 = Plan::new();
+        plan_0.portals.insert(Point2::new(0, 0));
+        let game_frame_1 = apply_plan(&game_frame_0, &plan_0).expect("Couldn't create a portal");
+        let player_id = game_frame_1
+            .players
+            .id_by_position(&Point2::new(0, 0))
+            .expect("Couldn't find a player at (0,0)");
+        let mut plan_1 = Plan::new();
+        plan_1.moves.insert(player_id, Move::Jump);
+        apply_plan(&game_frame_1, &plan_1).expect_err("Completed infinite loop");
     }
 }

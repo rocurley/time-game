@@ -1,17 +1,18 @@
-extern crate graph;
+extern crate petgraph;
 extern crate types;
 
-use graph::Graph;
+use graphmap::UnGraphMap;
+use petgraph::graphmap;
 use types::{Id, ItemDrop, Player, Portal};
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PlayerPortalGraphNode {
     Beginning,
     Portal(Id<Portal>),
     End,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ItemPortalGraphNode {
     Beginning,
     Dropped(Id<ItemDrop>),
@@ -19,5 +20,5 @@ pub enum ItemPortalGraphNode {
     End,
 }
 
-pub type PlayerPortalGraph = Graph<PlayerPortalGraphNode, Id<Player>>;
-pub type ItemPortalGraph = Graph<ItemPortalGraphNode, Id<Player>>;
+pub type PlayerPortalGraph = UnGraphMap<PlayerPortalGraphNode, Id<Player>>;
+pub type ItemPortalGraph = UnGraphMap<ItemPortalGraphNode, ()>;
