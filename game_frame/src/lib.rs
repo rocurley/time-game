@@ -2,6 +2,7 @@ extern crate petgraph;
 extern crate portal_graph;
 extern crate types;
 
+use self::portal_graph::PlayerPortalGraphNode;
 use portal_graph::{ItemPortalGraph, PlayerPortalGraph};
 use std::collections::HashMap;
 use std::fmt;
@@ -37,5 +38,14 @@ impl GameFrame {
             player_portal_graph: GraphMap::new(),
             item_portal_graphs: HashMap::new(),
         }
+    }
+    pub fn insert_player(&mut self, player: Player) -> Result<(), &'static str> {
+        self.player_portal_graph.add_edge(
+            PlayerPortalGraphNode::Beginning,
+            PlayerPortalGraphNode::End,
+            player.id,
+        );
+        self.players.insert(player)?;
+        Ok(())
     }
 }

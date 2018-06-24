@@ -37,18 +37,15 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 let portal = portals
                     .remove_by_position(&old_player.position)
                     .ok_or("Tried to close loop at wrong position")?;
-                let mut player_node = PlayerPortalGraphNode::Beginning;
-                loop {
-                    for (_, target, edge) in player_portal_graph.edges(player_node) {
-                        if *edge == old_player.id {
-                            player_node = target;
-                            continue;
-                        }
-                    }
-                    break;
-                }
+                let (player_origin, _, _) = player_portal_graph
+                    .all_edges()
+                    .find(|(_, _, &edge)| edge == old_player.id)
+                    .expect("Couldn't find player in portal graph");
+                player_portal_graph
+                    .remove_edge(player_origin, PlayerPortalGraphNode::End)
+                    .expect("Tried to close portal when edge unconnected to End");
                 player_portal_graph.add_edge(
-                    player_node,
+                    player_origin,
                     PlayerPortalGraphNode::Portal(portal.id),
                     old_player.id,
                 );
@@ -157,8 +154,7 @@ mod tests {
             .prop_map(|player| {
                 let mut frame = GameFrame::new();
                 frame
-                    .players
-                    .insert(player)
+                    .insert_player(player)
                     .expect("Failed to insert player");
                 vec![frame]
             })
