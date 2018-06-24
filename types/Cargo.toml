@@ -6,7 +6,6 @@ authors = ["Roger Curley <rocurley@gmail.com>"]
 
 [dependencies]
 tree = { path = "../tree" }
-graph = { path = "../graph" }
 rand = "0.4.1"
 ggez = { path = "../../ggez"}
 nalgebra = "0.13.1"
