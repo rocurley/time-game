@@ -5,8 +5,11 @@ extern crate types;
 
 extern crate nalgebra;
 
+use self::graphmap::GraphMap;
+use self::petgraph::graphmap;
+
 use self::game_frame::GameFrame;
-use self::portal_graph::PlayerPortalGraphNode;
+use self::portal_graph::{ItemPortalGraphNode, PlayerPortalGraphNode};
 use self::types::{
     Direction, DoubleMap, HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal,
 };
@@ -14,7 +17,7 @@ use self::types::{
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
     let mut portals = initial_frame.portals.clone();
     let mut player_portal_graph = initial_frame.player_portal_graph.clone();
-    let item_portal_graphs = initial_frame.item_portal_graphs.clone();
+    let mut item_portal_graphs = initial_frame.item_portal_graphs.clone();
     let mut items = initial_frame.items.clone();
     let mut players = DoubleMap::new();
     for (_, old_player) in initial_frame.players.iter() {
@@ -63,15 +66,70 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 let item_drop = items
                     .remove_by_position(&player.position)
                     .ok_or("Couln't pick up: no item")?;
-                player.inventory.insert(item_drop.item)?;
+                let item = item_drop.item;
+                let item_portal_graph = item_portal_graphs
+                    .entry(item.clone())
+                    .or_insert_with(GraphMap::new);
+                let new_held_ix = (0usize..)
+                    .find(|&i| {
+                        !item_portal_graph.contains_node(ItemPortalGraphNode::Held(player.id, i))
+                    })
+                    .expect("Exhausted usize looking for unused held index");
+                item_portal_graph
+                    .remove_edge(
+                        ItemPortalGraphNode::Dropped(item_drop.id),
+                        ItemPortalGraphNode::End,
+                    )
+                    .expect("Tried to pick up when edge unconnected to End");
+                item_portal_graph.add_edge(
+                    ItemPortalGraphNode::Dropped(item_drop.id),
+                    ItemPortalGraphNode::Held(player.id, new_held_ix),
+                    (),
+                );
+                item_portal_graph.add_edge(
+                    ItemPortalGraphNode::Held(player.id, new_held_ix),
+                    ItemPortalGraphNode::End,
+                    (),
+                );
+                player.inventory.insert(item)?;
                 players.insert(player)?;
             }
             Some(&Move::Drop(item_ix)) => {
+                //TODO: Think about how to deal with hypothetical items more carefully.
+                //Check the notes: do we need to eliminate End or something?
                 let mut player: Player = old_player.clone();
                 let item = player.inventory.drop(item_ix)?;
-                let item_drop = ItemDrop::new(item, player.position);
+                let dropped_all = ! player.inventory.cells().iter().any(|oCell| oCell.as_ref().map_or(false, |cell| cell.item == item));
+                let item_drop = ItemDrop::new(item.clone(), player.position);
+                let player_id = player.id;
+                let item_drop_id = item_drop.id;
                 items.insert(item_drop)?;
                 players.insert(player)?;
+                let item_portal_graph = item_portal_graphs
+                    .entry(item.clone())
+                    .or_insert_with(GraphMap::new);
+                let new_held_ix = (0usize..)
+                    .find(|&i| {
+                        !item_portal_graph.contains_node(ItemPortalGraphNode::Held(player_id, i))
+                    })
+                    .expect("Exhausted usize looking for unused held index");
+                let held_ix = new_held_ix - 1;
+                item_portal_graph
+                    .remove_edge(
+                        ItemPortalGraphNode::Dropped(item_drop_id),
+                        ItemPortalGraphNode::End,
+                    )
+                    .expect("Tried to pick up when edge unconnected to End");
+                item_portal_graph.add_edge(
+                    ItemPortalGraphNode::Dropped(item_drop_id),
+                    ItemPortalGraphNode::Held(player_id, new_held_ix),
+                    (),
+                );
+                item_portal_graph.add_edge(
+                    ItemPortalGraphNode::Held(player_id, new_held_ix),
+                    ItemPortalGraphNode::End,
+                    (),
+                );
             }
         }
     }

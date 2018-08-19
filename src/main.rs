@@ -35,12 +35,10 @@ pub fn main() {
             .insert_player(Player::new(Point2::new(0, 4)))
             .expect("Could not insert player");
         game_frame
-            .items
-            .insert(ItemDrop::new(Item::Key(Key {}), Point2::new(5, 5)))
+            .insert_item_drop(ItemDrop::new(Item::Key(Key {}), Point2::new(5, 5)))
             .expect("Could not insert item");
         game_frame
-            .items
-            .insert(ItemDrop::new(Item::Key(Key {}), Point2::new(3, 3)))
+            .insert_item_drop(ItemDrop::new(Item::Key(Key {}), Point2::new(3, 3)))
             .expect("Could not insert item");
     }
     event::run(ctx, game_state).unwrap();

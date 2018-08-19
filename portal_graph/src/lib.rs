@@ -16,7 +16,7 @@ pub enum PlayerPortalGraphNode {
 pub enum ItemPortalGraphNode {
     Beginning,
     Dropped(Id<ItemDrop>),
-    Portal(Id<Portal>),
+    Held(Id<Player>, usize),
     End,
 }
 
