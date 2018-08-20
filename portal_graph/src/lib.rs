@@ -18,7 +18,6 @@ pub enum ItemPortalGraphNode {
     Beginning,
     Dropped(Id<ItemDrop>),
     Held(Id<Player>, usize),
-    End,
 }
 
 pub type PlayerPortalGraph = UnGraphMap<PlayerPortalGraphNode, Id<Player>>;

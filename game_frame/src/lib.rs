@@ -48,11 +48,6 @@ impl GameFrame {
                 ItemPortalGraphNode::Dropped(drop.id),
                 (),
             );
-        item_portal_graph.add_edge(
-                ItemPortalGraphNode::Dropped(drop.id),
-                ItemPortalGraphNode::End,
-                (),
-            );
         self.items.insert(drop)?;
         Ok(())
     }
