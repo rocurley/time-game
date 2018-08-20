@@ -99,7 +99,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 //Check the notes: do we need to eliminate End or something?
                 let mut player: Player = old_player.clone();
                 let item = player.inventory.drop(item_ix)?;
-                let dropped_all = ! player.inventory.cells().iter().any(|oCell| oCell.as_ref().map_or(false, |cell| cell.item == item));
+                let dropped_all = ! player.inventory.cells().iter().any(|o_cell| o_cell.as_ref().map_or(false, |cell| cell.item == item));
                 let item_drop = ItemDrop::new(item.clone(), player.position);
                 let player_id = player.id;
                 let item_drop_id = item_drop.id;
