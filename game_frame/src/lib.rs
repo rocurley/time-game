@@ -40,14 +40,15 @@ impl GameFrame {
         }
     }
     pub fn insert_item_drop(&mut self, drop: ItemDrop) -> Result<(), &'static str> {
-        let item_portal_graph = self.item_portal_graphs
+        let item_portal_graph = self
+            .item_portal_graphs
             .entry(drop.item.clone())
             .or_insert_with(GraphMap::new);
         item_portal_graph.add_edge(
-                ItemPortalGraphNode::Beginning,
-                ItemPortalGraphNode::Dropped(drop.id),
-                (),
-            );
+            ItemPortalGraphNode::Beginning,
+            ItemPortalGraphNode::Dropped(drop.id),
+            (),
+        );
         self.items.insert(drop)?;
         Ok(())
     }

@@ -324,6 +324,7 @@ impl event::EventHandler for GameState {
             ) {
                 Err(err) => println!("{}", err),
                 Ok(new_frame) => {
+                    println!("{:?}", new_frame.item_portal_graphs);
                     match self.current_plan {
                         CachablePlan::Novel(ref mut plan) => {
                             let old_plan = std::mem::replace(plan, Plan::new());

@@ -73,8 +73,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 let new_held_ix = (0usize..)
                     .find(|&i| {
                         !item_portal_graph.contains_node(ItemPortalGraphNode::Held(player.id, i))
-                    })
-                    .expect("Exhausted usize looking for unused held index");
+                    }).expect("Exhausted usize looking for unused held index");
                 item_portal_graph.add_edge(
                     ItemPortalGraphNode::Dropped(item_drop.id),
                     ItemPortalGraphNode::Held(player.id, new_held_ix),
@@ -84,10 +83,15 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 players.insert(player)?;
             }
             Some(&Move::Drop(item_ix)) => {
-                //TODO: Think about how to deal with hypothetical items more carefully.
+                //TODO: We need to be able to update the item graph live as you wish and unwish for
+                //things.
                 let mut player: Player = old_player.clone();
                 let item = player.inventory.drop(item_ix)?;
-                let dropped_all = ! player.inventory.cells().iter().any(|o_cell| o_cell.as_ref().map_or(false, |cell| cell.item == item));
+                let still_holding = player
+                    .inventory
+                    .cells()
+                    .iter()
+                    .any(|o_cell| o_cell.as_ref().map_or(false, |cell| cell.item == item));
                 let item_drop = ItemDrop::new(item.clone(), player.position);
                 let player_id = player.id;
                 let item_drop_id = item_drop.id;
@@ -99,14 +103,20 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                 let new_held_ix = (0usize..)
                     .find(|&i| {
                         !item_portal_graph.contains_node(ItemPortalGraphNode::Held(player_id, i))
-                    })
-                    .expect("Exhausted usize looking for unused held index");
-                let held_ix = new_held_ix - 1;
+                    }).expect("Exhausted usize looking for unused held index");
                 item_portal_graph.add_edge(
                     ItemPortalGraphNode::Dropped(item_drop_id),
                     ItemPortalGraphNode::Held(player_id, new_held_ix),
                     (),
                 );
+                if still_holding {
+                    let held_ix = new_held_ix - 1;
+                    item_portal_graph.add_edge(
+                        ItemPortalGraphNode::Dropped(item_drop_id),
+                        ItemPortalGraphNode::Held(player_id, held_ix),
+                        (),
+                    );
+                }
             }
         }
     }
@@ -192,8 +202,7 @@ mod tests {
                     .insert_player(player)
                     .expect("Failed to insert player");
                 vec![frame]
-            })
-            .prop_recursive(depth, depth, 1, |prop_prior_frames| {
+            }).prop_recursive(depth, depth, 1, |prop_prior_frames| {
                 prop_prior_frames
                     .prop_flat_map(|prior_frames: Vec<GameFrame>| {
                         let prior_frame: GameFrame =
@@ -207,10 +216,8 @@ mod tests {
                                 new_frames.push(new_frame);
                                 new_frames
                             })
-                    })
-                    .boxed()
-            })
-            .boxed()
+                    }).boxed()
+            }).boxed()
     }
 
     proptest!{
