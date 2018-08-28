@@ -1,12 +1,12 @@
 extern crate petgraph;
 extern crate types;
 
-use graphmap::UnGraphMap;
+use graphmap::DiGraphMap;
 use petgraph::graphmap;
 use petgraph::Direction::Incoming;
 use types::{Id, ItemDrop, Player, Portal};
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum PlayerPortalGraphNode {
     Beginning,
     Portal(Id<Portal>),
@@ -21,10 +21,10 @@ pub enum ItemPortalGraphNode {
     Held(Id<Player>, usize), //Index. Lets you figure out the last node the player was at.
 }
 
-pub type PlayerPortalGraph = UnGraphMap<PlayerPortalGraphNode, Id<Player>>;
-pub type ItemPortalGraph = UnGraphMap<ItemPortalGraphNode, ()>;
+pub type PlayerPortalGraph = DiGraphMap<PlayerPortalGraphNode, Id<Player>>;
+pub type ItemPortalGraph = DiGraphMap<ItemPortalGraphNode, ()>;
 
-fn find_origin(graph: PlayerPortalGraph, id: Id<Player>) -> Option<PlayerPortalGraphNode> {
+pub fn find_origin(graph: &PlayerPortalGraph, id: Id<Player>) -> Option<PlayerPortalGraphNode> {
     let nodes: Vec<PlayerPortalGraphNode> = graph
         .neighbors_directed(PlayerPortalGraphNode::End, Incoming)
         .filter_map(|n| {
@@ -55,7 +55,7 @@ fn find_origin(graph: PlayerPortalGraph, id: Id<Player>) -> Option<PlayerPortalG
     }
 }
 
-fn find_latest_held(graph: ItemPortalGraph, player_id: Id<Player>) -> Option<ItemPortalGraphNode> {
+pub fn find_latest_held(graph: &ItemPortalGraph, player_id: Id<Player>) -> Option<ItemPortalGraphNode> {
     if !graph.contains_node(ItemPortalGraphNode::Held(player_id, 0)) {
         return None;
     }

@@ -10,6 +10,7 @@ extern crate rand;
 extern crate render;
 extern crate tree;
 extern crate types;
+extern crate petgraph;
 
 use ggez::graphics::Point2;
 use ggez::{event, graphics};
@@ -18,6 +19,7 @@ use graphics::Drawable;
 use std::f32::consts::PI;
 
 use nalgebra::{Similarity2, Vector2};
+use petgraph::dot::{Dot};
 
 use game_frame::*;
 use types::*;
@@ -324,7 +326,10 @@ impl event::EventHandler for GameState {
             ) {
                 Err(err) => println!("{}", err),
                 Ok(new_frame) => {
-                    println!("{:?}", new_frame.item_portal_graphs);
+                    for (item_type, item_portal_graph) in new_frame.item_portal_graphs.iter() {
+                        println!("{:?}", item_type);
+                        println!("{:?}", Dot::new(& item_portal_graph));
+                    }
                     match self.current_plan {
                         CachablePlan::Novel(ref mut plan) => {
                             let old_plan = std::mem::replace(plan, Plan::new());

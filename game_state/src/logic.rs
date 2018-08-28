@@ -9,7 +9,7 @@ use self::graphmap::GraphMap;
 use self::petgraph::graphmap;
 
 use self::game_frame::GameFrame;
-use self::portal_graph::{ItemPortalGraphNode, PlayerPortalGraphNode};
+use self::portal_graph::{find_latest_held, ItemPortalGraphNode, PlayerPortalGraphNode};
 use self::types::{
     Direction, DoubleMap, HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal,
 };
@@ -52,6 +52,14 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                     PlayerPortalGraphNode::Portal(portal.id),
                     old_player.id,
                 );
+                let new_player_id = match player_portal_graph
+                    .edges(PlayerPortalGraphNode::Portal(portal.id))
+                    .collect::<Vec<_>>()
+                    .as_slice()
+                {
+                    [(_, _, &new_player_id)] => new_player_id,
+                    slice => panic!("New node didn't have exactly one outgoing edge: {:?}", slice),
+                };
                 if !petgraph::algo::has_path_connecting(
                     &player_portal_graph,
                     PlayerPortalGraphNode::Portal(portal.id),
@@ -59,6 +67,15 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                     None,
                 ) {
                     return Err("Created infinite loop");
+                }
+                for (_, item_portal_graph) in item_portal_graphs.iter_mut() {
+                    for origin_node in find_latest_held(item_portal_graph, old_player.id) {
+                        item_portal_graph.add_edge(
+                            origin_node,
+                            ItemPortalGraphNode::Held(new_player_id, 0),
+                            (),
+                        );
+                    }
                 }
             }
             Some(&Move::PickUp) => {
