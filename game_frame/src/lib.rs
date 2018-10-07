@@ -6,7 +6,7 @@ use self::portal_graph::{ItemPortalGraphNode, PlayerPortalGraphNode};
 use portal_graph::{ItemPortalGraph, PlayerPortalGraph};
 use std::collections::HashMap;
 use std::fmt;
-use types::{DoubleMap, Item, ItemDrop, Player, Portal};
+use types::{DoubleMap, Item, ItemDrop, Player, Portal, GameError};
 
 use graphmap::GraphMap;
 use petgraph::graphmap;
@@ -39,7 +39,7 @@ impl GameFrame {
             item_portal_graphs: HashMap::new(),
         }
     }
-    pub fn insert_item_drop(&mut self, drop: ItemDrop) -> Result<(), &'static str> {
+    pub fn insert_item_drop(&mut self, drop: ItemDrop) -> Result<(), GameError> {
         let item_portal_graph = self
             .item_portal_graphs
             .entry(drop.item.clone())
@@ -52,7 +52,7 @@ impl GameFrame {
         self.items.insert(drop)?;
         Ok(())
     }
-    pub fn insert_player(&mut self, player: Player) -> Result<(), &'static str> {
+    pub fn insert_player(&mut self, player: Player) -> Result<(), GameError> {
         self.player_portal_graph.add_edge(
             PlayerPortalGraphNode::Beginning,
             PlayerPortalGraphNode::End,

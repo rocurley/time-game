@@ -46,9 +46,9 @@ impl GameState {
         })
     }
 
-    pub fn rotate_plan(&mut self) -> Result<(), &str> {
+    pub fn rotate_plan(&mut self) -> Result<(), GameError> {
         match self.history.focus.children.len() {
-            0 => Err("No future recorded: can't cycle plans"),
+            0 => Err("No future recorded: can't cycle plans")?,
             l => {
                 self.current_plan = match self.current_plan {
                     CachablePlan::Old(i) => CachablePlan::Old(i.checked_sub(1).unwrap_or(l - 1)),
@@ -88,7 +88,7 @@ impl GameState {
         &mut self,
         ctx: &mut ggez::Context,
         pt: Point2,
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), GameError> {
         match self.selected {
             Selection::Inventory(player_id, _) => {
                 self.selected = inventory_selection(pt, ctx, player_id);
@@ -99,7 +99,7 @@ impl GameState {
                     let frame = self.history.get_focus_val_mut();
                     let selection = &mut self.selected;
                     if let Some(item_drop) = frame.items.get_by_position(&tile_pt) {
-                        frame.players.mutate_by_id(&player_id, |mut player| {
+                        frame.players.mutate_by_id(&player_id, |mut player| -> Result<Player, GameError> {
                             match player.inventory {
                                 Inventory::Actual(_) => panic!("Wishing from actual inventory"),
                                 Inventory::Hypothetical(ref mut hypothetical) => {
@@ -132,7 +132,7 @@ impl GameState {
                             .expect("Selection target player id invalid");
                         if let Some(cell) = target_player.inventory.cells()[ix].as_ref() {
                             let item = cell.item.clone();
-                            frame.players.mutate_by_id(&player_id, |mut player| {
+                            frame.players.mutate_by_id(&player_id, |mut player| -> Result<Player, GameError> {
                                 match player.inventory {
                                     Inventory::Actual(_) => panic!("Wishing from actual inventory"),
                                     Inventory::Hypothetical(ref mut hypothetical) => {
@@ -273,7 +273,7 @@ impl event::EventHandler for GameState {
                     let selection = &mut self.selected;
                     let wish_result = self.history.get_focus_val_mut().players.mutate_by_id(
                         &player_id,
-                        |mut player| {
+                        |mut player| -> Result<Player, GameError> {
                             if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory
                             {
                                 match hypothetical.cells[ix] {
@@ -291,7 +291,7 @@ impl event::EventHandler for GameState {
                 Keycode::Minus => {
                     let wish_result = self.history.get_focus_val_mut().players.mutate_by_id(
                         &player_id,
-                        |mut player| {
+                        |mut player| -> Result<Player, GameError> {
                             if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory
                             {
                                 hypothetical.unwish(ix)?

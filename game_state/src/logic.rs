@@ -11,10 +11,10 @@ use self::petgraph::graphmap;
 use self::game_frame::GameFrame;
 use self::portal_graph::{find_latest_held, ItemPortalGraphNode, PlayerPortalGraphNode};
 use self::types::{
-    Direction, DoubleMap, HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal,
+    Direction, DoubleMap, HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal, GameError
 };
 
-pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &'static str> {
+pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, GameError> {
     let mut portals = initial_frame.portals.clone();
     let mut player_portal_graph = initial_frame.player_portal_graph.clone();
     let mut item_portal_graphs = initial_frame.item_portal_graphs.clone();
@@ -66,7 +66,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                     PlayerPortalGraphNode::End,
                     None,
                 ) {
-                    return Err("Created infinite loop");
+                    Err("Created infinite loop")?;
                 }
                 for (_, item_portal_graph) in item_portal_graphs.iter_mut() {
                     for origin_node in find_latest_held(item_portal_graph, old_player.id) {
@@ -96,7 +96,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, &
                     ItemPortalGraphNode::Held(player.id, new_held_ix),
                     (),
                 );
-                player.inventory.insert(item)?;
+                player.inventory.insert(&item)?;
                 players.insert(player)?;
             }
             Some(&Move::Drop(item_ix)) => {

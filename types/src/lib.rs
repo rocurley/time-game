@@ -6,6 +6,8 @@ extern crate rand;
 extern crate tree;
 
 use ggez::graphics;
+use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
@@ -103,22 +105,28 @@ impl<T> DoubleMap<T> {
     }
 }
 
+pub type GameError = Cow<'static, str>;
+
 impl<T> DoubleMap<T>
 where
     T: DoubleMappable,
 {
-    pub fn insert(&mut self, t: T) -> Result<(), &'static str> {
+    pub fn insert(&mut self, t: T) -> Result<(), GameError> {
         match self.by_position.entry(t.position()) {
-            Entry::Occupied(_) => return Err("Position occupied"),
+            Entry::Occupied(_) => {
+                Err("Position occupied")?;
+            }
             Entry::Vacant(position_entry) => match self.by_id.entry(t.id()) {
-                Entry::Occupied(_) => return Err("Id already exists"),
+                Entry::Occupied(_) => {
+                    Err("Id already exists")?;
+                }
                 Entry::Vacant(id_entry) => {
                     position_entry.insert(t.id());
                     id_entry.insert(t);
-                    Ok(())
                 }
             },
         }
+        Ok(())
     }
     pub fn remove_by_id(&mut self, id: &Id<T>) -> Option<T> {
         self.by_id.remove(id).map(|t| {
@@ -128,13 +136,15 @@ where
             t
         })
     }
-    pub fn mutate_by_id<F>(&mut self, id: &Id<T>, f: F) -> Result<(), &'static str>
+    pub fn mutate_by_id<F, E>(&mut self, id: &Id<T>, f: F) -> Result<(), GameError>
     where
-        F: FnOnce(T) -> Result<T, &'static str>,
+        F: FnOnce(T) -> Result<T, E>,
+        GameError: From<E>,
     {
         let t_orig = self.remove_by_id(id).ok_or("Id missing")?;
         let t_final = f(t_orig)?;
-        self.insert(t_final)
+        self.insert(t_final)?;
+        Ok(())
     }
 }
 
@@ -319,6 +329,9 @@ pub struct HypotheticalInventory {
     pub constraints: HashMap<Item, usize>,
     //The minimum number of a given type the player ever had. Assume 0.
     //Will be subtracted from constraints when attempting to resolve.
+    //Note that this will become more subtle if you can use items within
+    //your inventory: it's really a count of the number of never-used
+    //instances of the item.
     pub minima: HashMap<Item, usize>,
 }
 
@@ -370,6 +383,117 @@ impl HypotheticalInventory {
         }
         Ok(())
     }
+
+    fn count_items(cells: &[Option<InventoryCell>]) -> HashMap<Item, usize> {
+        let mut counts = HashMap::new();
+        for option_cell in cells {
+            if let Some(cell) = option_cell {
+                let count = counts.entry(cell.item.clone()).or_insert(0);
+                *count += cell.count as usize;
+            }
+        }
+        counts
+    }
+
+    pub fn merge_in(&self, other: Inventory) -> Result<Inventory, String> {
+        match other {
+            Inventory::Actual(actual_other) => {
+                let mut constraints: HashMap<Item, isize> = self
+                    .constraints
+                    .iter()
+                    .map(|(i, &c)| (i.clone(), c as isize))
+                    .collect();
+                for cell in actual_other.cells.iter().flat_map(|c| c.iter()) {
+                    let constraint = constraints.entry(cell.item.clone()).or_insert(0);
+                    *constraint -= cell.count as isize;
+                }
+                let mut cells = self.cells.clone();
+                for (item, &count) in constraints.iter() {
+                    match count.cmp(&0) {
+                        Ordering::Less => {
+                            if let Err(extra) = add_to_cells(&mut cells, item, (-count) as usize) {
+                                panic!("Too many {:?}: can't find space for {:?}", item, extra);
+                            }
+                        }
+                        Ordering::Equal => {}
+                        Ordering::Greater => {
+                            let minimum = self.minima.get(item).map_or(0, |x| *x as isize);
+                            if count > minimum {
+                                return Err(format!(
+                                    "Not enough {:?} : {} short",
+                                    item,
+                                    count - minimum
+                                ));
+                            } else {
+                                if let Err(short) =
+                                    remove_from_cells(&mut cells, item, count as usize)
+                                {
+                                    panic!(
+                                        "Should have had enough {:?}, but fell {:?} short",
+                                        item, short
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(Inventory::Actual(ActualInventory { cells }))
+            }
+            Inventory::Hypothetical(hypothetical_other) => {
+                //This can't actually fail. We basically want to adjust the other inventory
+                //until its item counts match our constraints. Sometimes this won't be possible:
+                //the other inventory's minima prevent unwishing far enough. In that case,
+                //we can wish up the current inventory. Once the inventories match up,
+                //we merge the minima and we're done.
+                //
+                let mut extras = HypotheticalInventory::count_items(&hypothetical_other.cells);
+                let mut other_minima = hypothetical_other.minima.clone();
+                let mut other_constraints = hypothetical_other.constraints.clone();
+                let mut self_constraints = self.constraints.clone();
+                let mut minima = self.minima.clone();
+                let mut cells = self.cells.clone();
+                //We want to match up self_constraints with other_counts.
+                //After this, what's left of extras will be what the self inventory needs to
+                //wish for.
+                for (item, &mut needed) in self_constraints.iter_mut() {
+                    use std::collections::hash_map::Entry;
+                    if let Entry::Occupied(mut extra) = extras.entry(item.clone()) {
+                        match needed.cmp(extra.get()) {
+                            Ordering::Less => {
+                                *extra.get_mut() -= needed;
+                            }
+                            Ordering::Equal => {
+                                extra.remove();
+                            }
+                            Ordering::Greater => {
+                                //Other has to wish to make up the difference
+                                let other_count = extra.remove();
+                                let other_constraint =
+                                    other_constraints.entry(item.clone()).or_insert(0);
+                                *other_constraint += needed - other_count;
+                                let other_minimum = other_minima.entry(item.clone()).or_insert(0);
+                                *other_minimum += needed - other_count;
+                            }
+                        }
+                    }
+                }
+                //Wish for extras:
+                for (item, extra) in extras {
+                    add_to_cells(&mut cells, &item, extra).map_err(|overflow| {
+                        format!("Too many {:?} : can't find space for {}", item, overflow)
+                    })?;
+                    let minimum = minima.entry(item).or_insert(0);
+                    *minimum += extra;
+                }
+                //TODO: Merge minima
+                Ok(Inventory::Hypothetical(HypotheticalInventory {
+                    cells,
+                    minima,
+                    constraints: other_constraints,
+                }))
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -386,29 +510,65 @@ impl ActualInventory {
 
 fn insert_into_cells(
     cells: &mut [Option<InventoryCell>; 32],
-    item: Item,
-) -> Result<(), &'static str> {
-    let mut fallback: Option<&mut Option<InventoryCell>> = None;
-    for slot in cells {
-        match slot {
-            &mut None => if fallback.is_none() {
-                fallback = Some(slot)
-            },
-            &mut Some(ref mut inventory_cell) => {
-                if inventory_cell.item == item {
-                    inventory_cell.count += 1;
-                    return Ok(());
+    item: &Item,
+) -> Result<(), GameError> {
+    add_to_cells(cells, item, 1).map_err(|_| format!("Can't find space for {:?}", item).into())
+}
+
+fn add_to_cells(
+    cells: &mut [Option<InventoryCell>],
+    item: &Item,
+    mut count: usize,
+) -> Result<(), usize> {
+    for cell_option in cells.iter_mut() {
+        match cell_option {
+            Some(cell) if cell.item == *item => {
+                match count.cmp(&((u8::max_value() - cell.count) as usize)) {
+                    Ordering::Less => {
+                        cell.count += count as u8;
+                        return Ok(());
+                    }
+                    Ordering::Equal => {
+                        cell.count = u8::max_value();
+                        return Ok(());
+                    }
+                    Ordering::Greater => {
+                        count -= (u8::max_value() - cell.count) as usize;
+                        cell.count = u8::max_value();
+                    }
                 }
             }
+            _ => {}
         }
     }
-    match fallback {
-        None => Err("Nowhere to insert into inventory"),
-        Some(slot) => {
-            *slot = Some(InventoryCell { item, count: 1 });
-            Ok(())
+    return Err(count);
+}
+
+fn remove_from_cells(
+    cells: &mut [Option<InventoryCell>],
+    item: &Item,
+    mut count: usize,
+) -> Result<(), usize> {
+    for cell_option in cells.iter_mut().rev() {
+        match cell_option {
+            Some(cell) if cell.item == *item => match count.cmp(&(cell.count as usize)) {
+                Ordering::Less => {
+                    cell.count -= count as u8;
+                    return Ok(());
+                }
+                Ordering::Equal => {
+                    *cell_option = None;
+                    return Ok(());
+                }
+                Ordering::Greater => {
+                    count -= cell.count as usize;
+                    *cell_option = None;
+                }
+            },
+            _ => {}
         }
     }
+    return Err(count);
 }
 
 #[derive(Clone, Debug)]
@@ -417,7 +577,7 @@ pub enum Inventory {
     Hypothetical(HypotheticalInventory),
 }
 impl Inventory {
-    pub fn insert(&mut self, item: Item) -> Result<(), &'static str> {
+    pub fn insert(&mut self, item: &Item) -> Result<(), GameError> {
         insert_into_cells(self.cells_mut(), item)
     }
     pub fn drop(&mut self, item_ix: usize) -> Result<Item, &'static str> {
@@ -535,3 +695,10 @@ impl ItemDrop {
 //
 // Hell, maybe "use()" is the way to go. Select something from your inventory, click on something
 // else. This calls use() with what you clicked as an argument?
+
+#[cfg(test)]
+mod tests {
+    use super::HypotheticalInventory;
+    #[test]
+    fn test_merge_in() {}
+}

@@ -14,4 +14,4 @@ rand = "0.4.1"
 ggez = { path = "../../ggez" }
 nalgebra = "0.13.1"
 proptest = "0.4.0"
-petgraph = "0.4.12"
+petgraph = "0.4.13"
