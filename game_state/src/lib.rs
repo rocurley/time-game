@@ -1,7 +1,6 @@
 #![feature(nll)]
 
 extern crate ggez;
-extern crate nalgebra;
 #[cfg(test)]
 #[macro_use]
 pub extern crate proptest;
@@ -18,7 +17,8 @@ use graphics::Drawable;
 
 use std::f32::consts::PI;
 
-use nalgebra::{Similarity2, Vector2};
+use ggez::nalgebra;
+use ggez::nalgebra::{Similarity2, Vector2};
 use petgraph::dot::{Config, Dot};
 
 use game_frame::*;
@@ -84,11 +84,7 @@ impl GameState {
             }
         }
     }
-    fn left_click_event(
-        &mut self,
-        ctx: &mut ggez::Context,
-        pt: Point2,
-    ) -> Result<(), GameError> {
+    fn left_click_event(&mut self, ctx: &mut ggez::Context, pt: Point2) -> Result<(), GameError> {
         match self.selected {
             Selection::Inventory(player_id, _) => {
                 self.selected = inventory_selection(pt, ctx, player_id);
@@ -99,16 +95,19 @@ impl GameState {
                     let frame = self.history.get_focus_val_mut();
                     let selection = &mut self.selected;
                     if let Some(item_drop) = frame.items.get_by_position(&tile_pt) {
-                        frame.players.mutate_by_id(&player_id, |mut player| -> Result<Player, GameError> {
-                            match player.inventory {
-                                Inventory::Actual(_) => panic!("Wishing from actual inventory"),
-                                Inventory::Hypothetical(ref mut hypothetical) => {
-                                    hypothetical.wish(item_drop.item.clone(), ix)?;
-                                    *selection = Selection::Inventory(player_id, Some(ix));
-                                    Ok(player)
+                        frame.players.mutate_by_id(
+                            &player_id,
+                            |mut player| -> Result<Player, GameError> {
+                                match player.inventory {
+                                    Inventory::Actual(_) => panic!("Wishing from actual inventory"),
+                                    Inventory::Hypothetical(ref mut hypothetical) => {
+                                        hypothetical.wish(item_drop.item.clone(), ix)?;
+                                        *selection = Selection::Inventory(player_id, Some(ix));
+                                        Ok(player)
+                                    }
                                 }
-                            }
-                        })
+                            },
+                        )
                     } else {
                         Ok(())
                     }
@@ -132,16 +131,21 @@ impl GameState {
                             .expect("Selection target player id invalid");
                         if let Some(cell) = target_player.inventory.cells()[ix].as_ref() {
                             let item = cell.item.clone();
-                            frame.players.mutate_by_id(&player_id, |mut player| -> Result<Player, GameError> {
-                                match player.inventory {
-                                    Inventory::Actual(_) => panic!("Wishing from actual inventory"),
-                                    Inventory::Hypothetical(ref mut hypothetical) => {
-                                        hypothetical.wish(item, ix)?;
-                                        *selection = Selection::Inventory(player_id, Some(ix));
-                                        Ok(player)
+                            frame.players.mutate_by_id(
+                                &player_id,
+                                |mut player| -> Result<Player, GameError> {
+                                    match player.inventory {
+                                        Inventory::Actual(_) => {
+                                            panic!("Wishing from actual inventory")
+                                        }
+                                        Inventory::Hypothetical(ref mut hypothetical) => {
+                                            hypothetical.wish(item, ix)?;
+                                            *selection = Selection::Inventory(player_id, Some(ix));
+                                            Ok(player)
+                                        }
                                     }
-                                }
-                            })
+                                },
+                            )
                         } else {
                             Ok(())
                         }
@@ -311,9 +315,11 @@ impl event::EventHandler for GameState {
             | Selection::WishPickerInventoryViewer(_, _, _) => {}
         }
         match key {
-            Keycode::Tab => if let Err(err) = self.rotate_plan() {
-                println!("{}", err);
-            },
+            Keycode::Tab => {
+                if let Err(err) = self.rotate_plan() {
+                    println!("{}", err);
+                }
+            }
             Keycode::Backspace => match self.history.up() {
                 Ok(ix) => {
                     self.current_plan = CachablePlan::Old(ix);

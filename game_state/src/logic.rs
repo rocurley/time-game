@@ -3,7 +3,7 @@ extern crate petgraph;
 extern crate portal_graph;
 extern crate types;
 
-extern crate nalgebra;
+extern crate ggez;
 
 use self::graphmap::GraphMap;
 use self::petgraph::graphmap;
@@ -13,6 +13,7 @@ use self::portal_graph::{find_latest_held, ItemPortalGraphNode, PlayerPortalGrap
 use self::types::{
     Direction, DoubleMap, HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal, GameError
 };
+use ggez::nalgebra;
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, GameError> {
     let mut portals = initial_frame.portals.clone();
@@ -187,7 +188,8 @@ mod tests {
         let moves = proptest::collection::vec(
             proptest::sample::select(POSSIBLE_MOVES.as_ref()),
             game_frame.players.len()..game_frame.players.len() + 1,
-        ).prop_map(move |moves_vec| {
+        )
+        .prop_map(move |moves_vec| {
             game_frame
                 .players
                 .iter()
@@ -237,7 +239,7 @@ mod tests {
             }).boxed()
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn test_apply_plan(ref game_frames in unfold_arbitrary_plans(10)) {
             for frame in game_frames.iter() {

@@ -11,7 +11,6 @@ game_frame = { path = "../game_frame" }
 render = { path = "../render" }
 portal_graph = { path = "../portal_graph" }
 rand = "0.4.1"
-ggez = { path = "../../ggez" }
-nalgebra = "0.13.1"
+ggez = "0.4"
 proptest = "0.4.0"
 petgraph = "0.4.13"

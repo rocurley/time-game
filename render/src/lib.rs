@@ -1,14 +1,14 @@
 #![feature(nll)]
 
 extern crate ggez;
-extern crate nalgebra;
 extern crate types;
 
 use ggez::graphics;
 use graphics::Drawable;
 use graphics::Point2;
 
-use nalgebra::{Similarity2, Vector2};
+use ggez::nalgebra;
+use ggez::nalgebra::{Similarity2, Vector2};
 
 use types::*;
 

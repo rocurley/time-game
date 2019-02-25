@@ -1,11 +1,11 @@
 #![feature(nll)]
 
 extern crate ggez;
-extern crate nalgebra;
 extern crate rand;
 extern crate tree;
 
 use ggez::graphics;
+use ggez::nalgebra;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;

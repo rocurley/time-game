@@ -10,6 +10,6 @@ game_state = { path = "game_state" }
 render = { path = "render" }
 portal_graph = { path = "portal_graph" }
 
-ggez = { path = "../ggez"}
+ggez = "0.4"
 
 [workspace]

@@ -6,5 +6,4 @@ authors = ["Roger Curley <rocurley@gmail.com>"]
 
 [dependencies]
 types = { path = "../types" }
-ggez = { path = "../../ggez" }
-nalgebra = "0.13.1"
+ggez = "0.4"
