@@ -1,8 +1,4 @@
-extern crate petgraph;
-extern crate types;
-
-use graphmap::DiGraphMap;
-use petgraph::graphmap;
+use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction::Incoming;
 use types::{Id, ItemDrop, Player, Portal};
 
@@ -36,7 +32,8 @@ pub fn find_origin(graph: &PlayerPortalGraph, id: Id<Player>) -> Option<PlayerPo
             } else {
                 None
             }
-        }).collect();
+        })
+        .collect();
     let mut node = match nodes.as_slice() {
         [] => None,
         [node] => Some(*node),
@@ -55,7 +52,10 @@ pub fn find_origin(graph: &PlayerPortalGraph, id: Id<Player>) -> Option<PlayerPo
     }
 }
 
-pub fn find_latest_held(graph: &ItemPortalGraph, player_id: Id<Player>) -> Option<ItemPortalGraphNode> {
+pub fn find_latest_held(
+    graph: &ItemPortalGraph,
+    player_id: Id<Player>,
+) -> Option<ItemPortalGraphNode> {
     if !graph.contains_node(ItemPortalGraphNode::Held(player_id, 0)) {
         return None;
     }

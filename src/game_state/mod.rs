@@ -1,19 +1,6 @@
-#![feature(nll)]
-
-extern crate ggez;
-#[cfg(test)]
-#[macro_use]
-pub extern crate proptest;
-extern crate game_frame;
-extern crate petgraph;
-extern crate rand;
-extern crate render;
-extern crate tree;
-extern crate types;
-
+use ggez::graphics::Drawable;
 use ggez::graphics::Point2;
 use ggez::{event, graphics};
-use graphics::Drawable;
 
 use std::f32::consts::PI;
 
@@ -24,6 +11,7 @@ use petgraph::dot::{Config, Dot};
 use game_frame::*;
 use types::*;
 
+use super::tree;
 use render::{draw_map_grid, inventory_bbox, pixel_space_to_tile_space, render_inventory};
 
 mod logic;
@@ -211,7 +199,7 @@ impl event::EventHandler for GameState {
         _keymod: event::Mod,
         _repeat: bool,
     ) {
-        use event::Keycode;
+        use self::event::Keycode;
         match self.selected {
             Selection::Player(player_id) => {
                 enum Update {

@@ -3,13 +3,16 @@ name = "time_game"
 version = "0.1.0"
 authors = ["Roger Curley <rocurley@gmail.com>"]
 
+[[bin]]
+name = "time_game"
+path = "src/main.rs"
+
+[lib]
+name = "time_game_lib"
+path = "src/lib.rs"
+
 [dependencies]
-tree = { path = "tree" }
-types = { path = "types" }
-game_state = { path = "game_state" }
-render = { path = "render" }
-portal_graph = { path = "portal_graph" }
-
 ggez = "0.4"
-
-[workspace]
+rand = "0.4.1"
+proptest = "0.4.2"
+petgraph = "0.4.13"

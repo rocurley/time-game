@@ -1,15 +1,9 @@
-extern crate petgraph;
-extern crate portal_graph;
-extern crate types;
-
-use self::portal_graph::{ItemPortalGraphNode, PlayerPortalGraphNode};
+use petgraph::graphmap::GraphMap;
 use portal_graph::{ItemPortalGraph, PlayerPortalGraph};
+use portal_graph::{ItemPortalGraphNode, PlayerPortalGraphNode};
 use std::collections::HashMap;
 use std::fmt;
-use types::{DoubleMap, Item, ItemDrop, Player, Portal, GameError};
-
-use graphmap::GraphMap;
-use petgraph::graphmap;
+use types::{DoubleMap, GameError, Item, ItemDrop, Player, Portal};
 
 #[derive(Clone)]
 pub struct GameFrame {

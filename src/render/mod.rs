@@ -1,16 +1,13 @@
 #![feature(nll)]
 
-extern crate ggez;
-extern crate types;
+use self::graphics::Drawable;
+use self::graphics::Point2;
+use super::ggez::graphics;
 
-use ggez::graphics;
-use graphics::Drawable;
-use graphics::Point2;
+use self::nalgebra::{Similarity2, Vector2};
+use super::ggez::nalgebra;
 
-use ggez::nalgebra;
-use ggez::nalgebra::{Similarity2, Vector2};
-
-use types::*;
+use super::types::*;
 
 pub fn draw_grid(ctx: &mut ggez::Context, bounds: graphics::Rect) -> ggez::GameResult<()> {
     let mut x = bounds.x;

@@ -1,9 +1,0 @@
-[package]
-
-name = "render"
-version = "0.1.0"
-authors = ["Roger Curley <rocurley@gmail.com>"]
-
-[dependencies]
-types = { path = "../types" }
-ggez = "0.4"

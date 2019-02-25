@@ -1,19 +1,12 @@
-extern crate game_frame;
-extern crate petgraph;
-extern crate portal_graph;
-extern crate types;
+use petgraph::graphmap::GraphMap;
 
-extern crate ggez;
-
-use self::graphmap::GraphMap;
-use self::petgraph::graphmap;
-
-use self::game_frame::GameFrame;
-use self::portal_graph::{find_latest_held, ItemPortalGraphNode, PlayerPortalGraphNode};
-use self::types::{
-    Direction, DoubleMap, HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal, GameError
-};
+use game_frame::GameFrame;
 use ggez::nalgebra;
+use portal_graph::{find_latest_held, ItemPortalGraphNode, PlayerPortalGraphNode};
+use types::{
+    Direction, DoubleMap, GameError, HypotheticalInventory, Inventory, ItemDrop, Move, Plan,
+    Player, Portal,
+};
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, GameError> {
     let mut portals = initial_frame.portals.clone();
@@ -59,7 +52,10 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                     .as_slice()
                 {
                     [(_, _, &new_player_id)] => new_player_id,
-                    slice => panic!("New node didn't have exactly one outgoing edge: {:?}", slice),
+                    slice => panic!(
+                        "New node didn't have exactly one outgoing edge: {:?}",
+                        slice
+                    ),
                 };
                 if !petgraph::algo::has_path_connecting(
                     &player_portal_graph,
@@ -91,7 +87,8 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 let new_held_ix = (0usize..)
                     .find(|&i| {
                         !item_portal_graph.contains_node(ItemPortalGraphNode::Held(player.id, i))
-                    }).expect("Exhausted usize looking for unused held index");
+                    })
+                    .expect("Exhausted usize looking for unused held index");
                 item_portal_graph.add_edge(
                     ItemPortalGraphNode::Dropped(item_drop.id),
                     ItemPortalGraphNode::Held(player.id, new_held_ix),
@@ -121,7 +118,8 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 let new_held_ix = (0usize..)
                     .find(|&i| {
                         !item_portal_graph.contains_node(ItemPortalGraphNode::Held(player_id, i))
-                    }).expect("Exhausted usize looking for unused held index");
+                    })
+                    .expect("Exhausted usize looking for unused held index");
                 item_portal_graph.add_edge(
                     ItemPortalGraphNode::Dropped(item_drop_id),
                     ItemPortalGraphNode::Held(player_id, new_held_ix),
@@ -162,11 +160,11 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
 }
 #[cfg(test)]
 mod tests {
-    use super::super::proptest;
-    use super::game_frame::GameFrame;
-    use super::types::{Direction, Move, Plan, Player};
-    use logic::apply_plan;
-    use nalgebra::Point2;
+    use super::super::super::game_frame::GameFrame;
+    use super::super::super::proptest;
+    use super::super::super::types::{Direction, Move, Plan, Player};
+    use super::apply_plan;
+    use ggez::nalgebra::Point2;
     use proptest::prelude::*;
     use std::collections::HashSet;
 
@@ -221,7 +219,8 @@ mod tests {
                     .insert_player(player)
                     .expect("Failed to insert player");
                 vec![frame]
-            }).prop_recursive(depth, depth, 1, |prop_prior_frames| {
+            })
+            .prop_recursive(depth, depth, 1, |prop_prior_frames| {
                 prop_prior_frames
                     .prop_flat_map(|prior_frames: Vec<GameFrame>| {
                         let prior_frame: GameFrame =
@@ -235,8 +234,10 @@ mod tests {
                                 new_frames.push(new_frame);
                                 new_frames
                             })
-                    }).boxed()
-            }).boxed()
+                    })
+                    .boxed()
+            })
+            .boxed()
     }
 
     proptest! {

@@ -335,30 +335,6 @@ version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "game_frame"
-version = "0.1.0"
-dependencies = [
- "petgraph 0.4.13 (registry+https://github.com/rust-lang/crates.io-index)",
- "portal_graph 0.1.0",
- "types 0.1.0",
-]
-
-[[package]]
-name = "game_state"
-version = "0.1.0"
-dependencies = [
- "game_frame 0.1.0",
- "ggez 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "petgraph 0.4.13 (registry+https://github.com/rust-lang/crates.io-index)",
- "portal_graph 0.1.0",
- "proptest 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "render 0.1.0",
- "tree 0.1.0",
- "types 0.1.0",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -821,14 +797,6 @@ version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "portal_graph"
-version = "0.1.0"
-dependencies = [
- "petgraph 0.4.13 (registry+https://github.com/rust-lang/crates.io-index)",
- "types 0.1.0",
-]
-
-[[package]]
 name = "proc-macro2"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1052,14 +1020,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "render"
-version = "0.1.0"
-dependencies = [
- "ggez 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "types 0.1.0",
-]
-
-[[package]]
 name = "rodio"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1243,12 +1203,10 @@ dependencies = [
 name = "time_game"
 version = "0.1.0"
 dependencies = [
- "game_state 0.1.0",
  "ggez 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "portal_graph 0.1.0",
- "render 0.1.0",
- "tree 0.1.0",
- "types 0.1.0",
+ "petgraph 0.4.13 (registry+https://github.com/rust-lang/crates.io-index)",
+ "proptest 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1258,10 +1216,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "serde 1.0.88 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
-
-[[package]]
-name = "tree"
-version = "0.1.0"
 
 [[package]]
 name = "twox-hash"
@@ -1275,15 +1229,6 @@ dependencies = [
 name = "typenum"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "types"
-version = "0.1.0"
-dependencies = [
- "ggez 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "tree 0.1.0",
-]
 
 [[package]]
 name = "ucd-util"

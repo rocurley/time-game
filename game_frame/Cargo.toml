@@ -1,9 +1,0 @@
-[package]
-name = "game_frame"
-version = "0.1.0"
-authors = ["roger <rocurley@gmail.com>"]
-
-[dependencies]
-types = { path = "../types" }
-portal_graph= { path = "../portal_graph" }
-petgraph = "0.4.12"
