@@ -535,6 +535,28 @@ fn add_to_cells(
             _ => {}
         }
     }
+    for cell_option in cells.iter_mut() {
+        if cell_option.is_none() {
+            let cell = cell_option.get_or_insert(InventoryCell {
+                item: item.clone(),
+                count: 0,
+            });
+            match count.cmp(&(u8::max_value() as usize)) {
+                Ordering::Less => {
+                    cell.count = count as u8;
+                    return Ok(());
+                }
+                Ordering::Equal => {
+                    cell.count = u8::max_value();
+                    return Ok(());
+                }
+                Ordering::Greater => {
+                    count -= u8::max_value() as usize;
+                    cell.count = u8::max_value();
+                }
+            }
+        }
+    }
     return Err(count);
 }
 

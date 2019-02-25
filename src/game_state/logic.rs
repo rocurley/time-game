@@ -115,21 +115,21 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 let item_portal_graph = item_portal_graphs
                     .entry(item.clone())
                     .or_insert_with(GraphMap::new);
-                let new_held_ix = (0usize..)
+                let next_held_ix = (0usize..)
                     .find(|&i| {
                         !item_portal_graph.contains_node(ItemPortalGraphNode::Held(player_id, i))
                     })
                     .expect("Exhausted usize looking for unused held index");
                 item_portal_graph.add_edge(
+                    ItemPortalGraphNode::Held(player_id, next_held_ix - 1),
                     ItemPortalGraphNode::Dropped(item_drop_id),
-                    ItemPortalGraphNode::Held(player_id, new_held_ix),
                     (),
                 );
+                //I'm skeptical that this can ever matter.
                 if still_holding {
-                    let held_ix = new_held_ix - 1;
                     item_portal_graph.add_edge(
                         ItemPortalGraphNode::Dropped(item_drop_id),
-                        ItemPortalGraphNode::Held(player_id, held_ix),
+                        ItemPortalGraphNode::Held(player_id, next_held_ix),
                         (),
                     );
                 }
