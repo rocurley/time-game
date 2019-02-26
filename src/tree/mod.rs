@@ -61,7 +61,7 @@ impl<T, E> Zipper<T, E> {
             left,
             right,
         });
-        return Ok(());
+        Ok(())
     }
     pub fn up(&mut self) -> Result<usize, &str> {
         self.frames
@@ -86,7 +86,8 @@ impl<T, E> Zipper<T, E> {
                     self.focus.children = left;
                     ix
                 },
-            ).ok_or("Already at top of zipper")
+            )
+            .ok_or("Already at top of zipper")
     }
     pub fn left(&mut self) -> Result<(), &str> {
         let focus = &mut self.focus;
@@ -105,7 +106,8 @@ impl<T, E> Zipper<T, E> {
                         right.push((old_edge, old_focus));
                     })
                 },
-            ).ok_or("Nothing to the left")
+            )
+            .ok_or("Nothing to the left")
     }
     pub fn right(&mut self) -> Result<(), &str> {
         let focus = &mut self.focus;
@@ -124,11 +126,12 @@ impl<T, E> Zipper<T, E> {
                         left.push((old_edge, old_focus));
                     })
                 },
-            ).ok_or("Nothing to the right")
+            )
+            .ok_or("Nothing to the right")
     }
     pub fn rezip(mut self) -> RoseTree<T, E> {
         while let Ok(_) = self.up() {}
-        return self.focus;
+        self.focus
     }
     pub fn push(&mut self, x: T, edge: E) {
         let left = mem::replace(&mut self.focus.children, Vec::new());

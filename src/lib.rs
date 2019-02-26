@@ -1,4 +1,7 @@
 #![feature(nll)]
+#![feature(copied)]
+#![allow(unknown_lints)]
+#![warn(clippy::all)]
 
 #[cfg(test)]
 #[macro_use]
@@ -10,7 +13,6 @@ extern crate rand;
 
 mod game_frame;
 pub mod game_state;
-mod graph;
 mod portal_graph;
 mod render;
 mod tree;

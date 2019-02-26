@@ -20,18 +20,15 @@ pub enum ItemPortalGraphNode {
 pub type PlayerPortalGraph = DiGraphMap<PlayerPortalGraphNode, Id<Player>>;
 pub type ItemPortalGraph = DiGraphMap<ItemPortalGraphNode, ()>;
 
+#[allow(dead_code)]
 pub fn find_origin(graph: &PlayerPortalGraph, id: Id<Player>) -> Option<PlayerPortalGraphNode> {
     let nodes: Vec<PlayerPortalGraphNode> = graph
         .neighbors_directed(PlayerPortalGraphNode::End, Incoming)
-        .filter_map(|n| {
+        .filter(|n| {
             let e = graph
-                .edge_weight(n, PlayerPortalGraphNode::End)
+                .edge_weight(*n, PlayerPortalGraphNode::End)
                 .expect("Edge listed in neighbors not found");
-            if id == *e {
-                Some(n)
-            } else {
-                None
-            }
+            id == *e
         })
         .collect();
     let mut node = match nodes.as_slice() {

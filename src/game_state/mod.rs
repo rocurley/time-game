@@ -362,25 +362,25 @@ impl event::EventHandler for GameState {
                 transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
                 0.,
             )?;
-            for mv in self
+            if let Some(mv) = self
                 .current_plan
                 .get(&self.history.focus.children)
                 .moves
                 .get(&player.id)
             {
-                let (image, rotation) = match mv {
-                    &Move::Direction(ref dir) => {
-                        let angle = match dir {
-                            &Direction::Up => 0.,
-                            &Direction::Left => 1.5 * PI,
-                            &Direction::Down => PI,
-                            &Direction::Right => 0.5 * PI,
+                let (image, rotation) = match *mv {
+                    Move::Direction(ref dir) => {
+                        let angle = match *dir {
+                            Direction::Up => 0.,
+                            Direction::Left => 1.5 * PI,
+                            Direction::Down => PI,
+                            Direction::Right => 0.5 * PI,
                         };
                         (&self.image_map.move_arrow, angle)
                     }
-                    &Move::Jump => (&self.image_map.jump_icon, 0.),
-                    &Move::PickUp => (&self.image_map.pick_up_icon, 0.),
-                    &Move::Drop(_) => (&self.image_map.drop_icon, 0.),
+                    Move::Jump => (&self.image_map.jump_icon, 0.),
+                    Move::PickUp => (&self.image_map.pick_up_icon, 0.),
+                    Move::Drop(_) => (&self.image_map.drop_icon, 0.),
                 };
                 let dest = transform
                     * (nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position)

@@ -23,6 +23,12 @@ impl fmt::Debug for GameFrame {
     }
 }
 
+impl Default for GameFrame {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GameFrame {
     pub fn new() -> Self {
         GameFrame {

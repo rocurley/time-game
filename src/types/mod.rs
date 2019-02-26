@@ -60,11 +60,12 @@ impl<T> fmt::Debug for Id<T> {
 
 type IdMap<T> = HashMap<Id<T>, T>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct DoubleMap<T> {
     by_id: IdMap<T>,
     by_position: HashMap<Point, Id<T>>,
 }
+#[allow(clippy::trivially_copy_pass_by_ref)]
 impl<T> DoubleMap<T> {
     pub fn new() -> Self {
         DoubleMap {
@@ -92,15 +93,19 @@ impl<T> DoubleMap<T> {
             .map(|id| self.by_id.remove(&id).expect("DoubleMap inconsistent"))
     }
     pub fn id_by_position(&self, pos: &Point) -> Option<Id<T>> {
-        self.by_position.get(pos).map(|id| id.clone())
+        self.by_position.get(pos).copied()
     }
     pub fn len(&self) -> usize {
         self.by_id.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.by_id.is_empty()
     }
 }
 
 pub type GameError = Cow<'static, str>;
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
 impl<T> DoubleMap<T>
 where
     T: DoubleMappable,
@@ -186,14 +191,14 @@ pub enum Selection {
 
 impl Selection {
     pub fn pop(&mut self) {
-        match self {
-            &mut Selection::Top => {}
-            &mut Selection::Player(_) => *self = Selection::Top,
-            &mut Selection::GridCell(_) => *self = Selection::Top,
-            &mut Selection::Inventory(id, None) => *self = Selection::Player(id),
-            &mut Selection::Inventory(id, Some(_)) => *self = Selection::Inventory(id, None),
-            &mut Selection::WishPicker(id, ix) => *self = Selection::Inventory(id, Some(ix)),
-            &mut Selection::WishPickerInventoryViewer(id, ix, _) => {
+        match *self {
+            Selection::Top => {}
+            Selection::Player(_) => *self = Selection::Top,
+            Selection::GridCell(_) => *self = Selection::Top,
+            Selection::Inventory(id, None) => *self = Selection::Player(id),
+            Selection::Inventory(id, Some(_)) => *self = Selection::Inventory(id, None),
+            Selection::WishPicker(id, ix) => *self = Selection::Inventory(id, Some(ix)),
+            Selection::WishPickerInventoryViewer(id, ix, _) => {
                 *self = Selection::WishPicker(id, ix)
             }
         }
@@ -267,7 +272,7 @@ pub enum Move {
     Drop(usize),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Plan {
     pub moves: HashMap<Id<Player>, Move>,
     pub portals: HashSet<Point>,
@@ -287,22 +292,28 @@ pub enum CachablePlan {
     Old(usize),
 }
 
+impl Default for CachablePlan {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CachablePlan {
     pub fn new() -> Self {
         CachablePlan::Novel(Plan::new())
     }
-    pub fn get<'a, T>(&'a self, history_children: &'a Vec<(Plan, T)>) -> &'a Plan {
-        match self {
-            &CachablePlan::Novel(ref p) => &p,
-            &CachablePlan::Old(ix) => &history_children[ix].0,
+    pub fn get<'a, T>(&'a self, history_children: &'a [(Plan, T)]) -> &'a Plan {
+        match *self {
+            CachablePlan::Novel(ref p) => &p,
+            CachablePlan::Old(ix) => &history_children[ix].0,
         }
     }
-    pub fn cow<'a, T>(&'a mut self, history_children: &'a Vec<(Plan, T)>) -> &'a mut Plan {
-        if let &mut CachablePlan::Old(ix) = self {
+    pub fn cow<'a, T>(&'a mut self, history_children: &'a [(Plan, T)]) -> &'a mut Plan {
+        if let CachablePlan::Old(ix) = *self {
             *self = CachablePlan::Novel(history_children[ix].0.clone());
         }
-        match self {
-            &mut CachablePlan::Novel(ref mut plan) => plan,
+        match *self {
+            CachablePlan::Novel(ref mut plan) => plan,
             _ => panic!("Just set the plan to be novel"),
         }
     }
@@ -316,7 +327,7 @@ pub struct InventoryCell {
     pub count: u8,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct HypotheticalInventory {
     pub cells: [Option<InventoryCell>; 32],
     //What the player has "wished for".
@@ -397,7 +408,7 @@ impl HypotheticalInventory {
                     .iter()
                     .map(|(i, &c)| (i.clone(), c as isize))
                     .collect();
-                for cell in actual_other.cells.iter().flat_map(|c| c.iter()) {
+                for cell in actual_other.cells.iter().flat_map(Option::iter) {
                     let constraint = constraints.entry(cell.item.clone()).or_insert(0);
                     *constraint -= cell.count as isize;
                 }
@@ -418,15 +429,13 @@ impl HypotheticalInventory {
                                     item,
                                     count - minimum
                                 ));
-                            } else {
-                                if let Err(short) =
-                                    remove_from_cells(&mut cells, item, count as usize)
-                                {
-                                    panic!(
-                                        "Should have had enough {:?}, but fell {:?} short",
-                                        item, short
-                                    );
-                                }
+                            } else if let Err(short) =
+                                remove_from_cells(&mut cells, item, count as usize)
+                            {
+                                panic!(
+                                    "Should have had enough {:?}, but fell {:?} short",
+                                    item, short
+                                );
                             }
                         }
                     }
@@ -490,7 +499,7 @@ impl HypotheticalInventory {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ActualInventory {
     pub cells: [Option<InventoryCell>; 32],
 }
@@ -557,7 +566,7 @@ fn add_to_cells(
             }
         }
     }
-    return Err(count);
+    Err(count)
 }
 
 fn remove_from_cells(
@@ -584,7 +593,7 @@ fn remove_from_cells(
             _ => {}
         }
     }
-    return Err(count);
+    Err(count)
 }
 
 #[derive(Clone, Debug)]
@@ -605,7 +614,7 @@ impl Inventory {
         if inventory_cell.count == 0 {
             self.cells_mut()[item_ix as usize] = None;
         };
-        if let &mut Inventory::Hypothetical(ref mut hypothetical) = self {
+        if let Inventory::Hypothetical(ref mut hypothetical) = *self {
             let mut count = 0;
             for option_cell in hypothetical.cells.iter() {
                 for cell in option_cell {
@@ -620,15 +629,15 @@ impl Inventory {
         Ok(item)
     }
     pub fn cells(&self) -> &[Option<InventoryCell>; 32] {
-        match self {
-            &Inventory::Actual(ref inventory) => &inventory.cells,
-            &Inventory::Hypothetical(ref inventory) => &inventory.cells,
+        match *self {
+            Inventory::Actual(ref inventory) => &inventory.cells,
+            Inventory::Hypothetical(ref inventory) => &inventory.cells,
         }
     }
     pub fn cells_mut(&mut self) -> &mut [Option<InventoryCell>; 32] {
-        match self {
-            &mut Inventory::Actual(ref mut inventory) => &mut inventory.cells,
-            &mut Inventory::Hypothetical(ref mut inventory) => &mut inventory.cells,
+        match *self {
+            Inventory::Actual(ref mut inventory) => &mut inventory.cells,
+            Inventory::Hypothetical(ref mut inventory) => &mut inventory.cells,
         }
     }
 }
@@ -657,8 +666,8 @@ pub enum Item {
 
 impl Item {
     pub fn image<'a>(&self, image_map: &'a ImageMap) -> &'a graphics::Image {
-        match self {
-            &Item::Key(ref key) => key.image(image_map),
+        match *self {
+            Item::Key(ref key) => key.image(image_map),
         }
     }
 }
@@ -714,7 +723,6 @@ impl ItemDrop {
 
 #[cfg(test)]
 mod tests {
-    use super::HypotheticalInventory;
     #[test]
     fn test_merge_in() {}
 }

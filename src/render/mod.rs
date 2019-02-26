@@ -1,5 +1,3 @@
-#![feature(nll)]
-
 use self::graphics::Drawable;
 use self::graphics::Point2;
 use super::ggez::graphics;
@@ -77,9 +75,9 @@ pub fn render_inventory(
     selected_item_option: &Option<usize>,
 ) -> ggez::GameResult<()> {
     let bounds = inventory_bbox(ctx);
-    let background = match inventory {
-        &Inventory::Actual(_) => graphics::Color::from_rgb(127, 127, 127),
-        &Inventory::Hypothetical(_) => graphics::Color::from_rgb(127, 127, 255),
+    let background = match *inventory {
+        Inventory::Actual(_) => graphics::Color::from_rgb(127, 127, 127),
+        Inventory::Hypothetical(_) => graphics::Color::from_rgb(127, 127, 255),
     };
     graphics::set_color(ctx, background)?;
     graphics::rectangle(ctx, graphics::DrawMode::Fill, bounds)?;

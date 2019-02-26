@@ -66,7 +66,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                     Err("Created infinite loop")?;
                 }
                 for (_, item_portal_graph) in item_portal_graphs.iter_mut() {
-                    for origin_node in find_latest_held(item_portal_graph, old_player.id) {
+                    if let Some(origin_node) = find_latest_held(item_portal_graph, old_player.id) {
                         item_portal_graph.add_edge(
                             origin_node,
                             ItemPortalGraphNode::Held(new_player_id, 0),
@@ -183,6 +183,7 @@ mod tests {
     }
 
     fn valid_plan(game_frame: GameFrame) -> BoxedStrategy<Plan> {
+        #[allow(clippy::range_plus_one)]
         let moves = proptest::collection::vec(
             proptest::sample::select(POSSIBLE_MOVES.as_ref()),
             game_frame.players.len()..game_frame.players.len() + 1,
@@ -191,7 +192,7 @@ mod tests {
             game_frame
                 .players
                 .iter()
-                .map(|(id, _)| id.clone())
+                .map(|(id, _)| *id)
                 .zip(moves_vec.into_iter())
                 .collect()
         });
@@ -227,7 +228,7 @@ mod tests {
                             prior_frames.last().expect("Empty frames vec").clone();
                         valid_plan(prior_frame.clone())
                             .prop_map(move |plan| apply_plan(&prior_frame, &plan.clone()))
-                            .prop_filter("plan wasn't allowed", |frame| frame.is_ok())
+                            .prop_filter("plan wasn't allowed", Result::is_ok)
                             .prop_map(move |frame| {
                                 let new_frame = frame.expect("Should have been filtered");
                                 let mut new_frames = prior_frames.clone();
