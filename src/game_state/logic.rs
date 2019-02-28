@@ -4,7 +4,7 @@ use game_frame::GameFrame;
 use ggez::nalgebra;
 use portal_graph::{find_latest_held, ItemPortalGraphNode, PlayerPortalGraphNode};
 use types::{
-    Direction, DoubleMap, GameError, HypotheticalInventory, Inventory, ItemDrop, Move, Plan,
+    Direction, DoubleMap, GameError, HypotheticalInventory, Id, Inventory, ItemDrop, Move, Plan,
     Player, Portal,
 };
 
@@ -14,6 +14,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
     let mut item_portal_graphs = initial_frame.item_portal_graphs.clone();
     let mut items = initial_frame.items.clone();
     let mut players = DoubleMap::new();
+    let mut inventories_to_merge: Vec<(Id<Player>, &Inventory)> = Vec::new();
     for (_, old_player) in initial_frame.players.iter() {
         match plan.moves.get(&old_player.id) {
             None => {
@@ -74,6 +75,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                         );
                     }
                 }
+                inventories_to_merge.push((new_player_id, &old_player.inventory));
             }
             Some(&Move::PickUp) => {
                 let mut player: Player = old_player.clone();
@@ -149,6 +151,18 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
             PlayerPortalGraphNode::End,
             player_id,
         );
+    }
+    for (player_id, old_inventory) in inventories_to_merge {
+        players.mutate_by_id(&player_id, |mut player| -> Result<Player, GameError> {
+            match player.inventory {
+                Inventory::Actual(_) => panic!("Merged into an actual inventory"),
+                Inventory::Hypothetical(ref inventory) => {
+                    let new_inventory = inventory.merge_in(old_inventory.clone())?;
+                    player.inventory = new_inventory;
+                }
+            }
+            Ok(player)
+        })?;
     }
     Ok(GameFrame {
         players,
