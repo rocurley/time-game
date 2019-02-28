@@ -14,7 +14,7 @@ use types::*;
 use super::tree;
 use render::{draw_map_grid, inventory_bbox, pixel_space_to_tile_space, render_inventory};
 
-mod logic;
+mod planning;
 
 pub struct GameState {
     pub history: tree::Zipper<GameFrame, Plan>,
@@ -263,13 +263,20 @@ impl event::EventHandler for GameState {
                 }
                 Keycode::Equals => {
                     let selection = &mut self.selected;
-                    let wish_result = self.history.get_focus_val_mut().players.mutate_by_id(
+                    let game_frame = self.history.get_focus_val_mut();
+                    let players = &mut game_frame.players;
+                    let item_portal_graphs = &mut game_frame.item_portal_graphs;
+                    let wish_result = players.mutate_by_id(
                         &player_id,
                         |mut player| -> Result<Player, GameError> {
                             if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory
                             {
                                 match hypothetical.cells[ix] {
-                                    Some(ref cell) => hypothetical.wish(cell.item.clone(), ix)?,
+                                    Some(ref cell) => {
+                                        let item_portal_graph =
+                                            item_portal_graphs.get_mut(&cell.item);
+                                        hypothetical.wish(cell.item.clone(), ix)?;
+                                    }
                                     None => *selection = Selection::WishPicker(player_id, ix),
                                 }
                             }
@@ -314,7 +321,7 @@ impl event::EventHandler for GameState {
                 }
                 Err(err) => println!("{}", err),
             },
-            Keycode::Return => match logic::apply_plan(
+            Keycode::Return => match planning::apply_plan(
                 &self.history.get_focus_val(),
                 &self.current_plan.get(&self.history.focus.children),
             ) {

@@ -1,6 +1,6 @@
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction::Incoming;
-use types::{Id, ItemDrop, Player, Portal};
+use types::{GameError, Id, ItemDrop, Player, Portal};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum PlayerPortalGraphNode {
@@ -21,7 +21,10 @@ pub type PlayerPortalGraph = DiGraphMap<PlayerPortalGraphNode, Id<Player>>;
 pub type ItemPortalGraph = DiGraphMap<ItemPortalGraphNode, ()>;
 
 #[allow(dead_code)]
-pub fn find_origin(graph: &PlayerPortalGraph, id: Id<Player>) -> Option<PlayerPortalGraphNode> {
+pub fn find_trail_from_origin(
+    graph: &PlayerPortalGraph,
+    id: Id<Player>,
+) -> Option<Vec<PlayerPortalGraphNode>> {
     let nodes: Vec<PlayerPortalGraphNode> = graph
         .neighbors_directed(PlayerPortalGraphNode::End, Incoming)
         .filter(|n| {
@@ -31,23 +34,35 @@ pub fn find_origin(graph: &PlayerPortalGraph, id: Id<Player>) -> Option<PlayerPo
             id == *e
         })
         .collect();
-    let mut node = match nodes.as_slice() {
+    let mut node = match *nodes.as_slice() {
         [] => None,
-        [node] => Some(*node),
+        [node] => Some(node),
         _ => panic!("Multiple edges with same player id"),
     }?;
+    let mut nodes: Vec<PlayerPortalGraphNode> = Vec::new();
     loop {
-        match graph
+        match *graph
             .neighbors_directed(node, Incoming)
             .collect::<Vec<PlayerPortalGraphNode>>()
             .as_slice()
         {
-            [] => return Some(node),
-            [new_node] => node = *new_node,
+            [] => break,
+            [mut new_node] => {
+                std::mem::swap(&mut node, &mut new_node);
+                nodes.push(new_node);
+            }
             _ => panic!("Multiple incomming edges"),
         }
     }
+    nodes.push(node);
+    Some(nodes)
 }
+
+/*
+pub fn wish(graph: &mut PlayerPortalGraph, id: Id<Player>) -> Result<(), GameError> {
+    let trail = find_trail_from_origin(graph, id).ok_or("Couldn't find player origin.")?;
+}
+*/
 
 pub fn find_latest_held(
     graph: &ItemPortalGraph,
