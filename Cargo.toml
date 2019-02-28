@@ -14,5 +14,5 @@ path = "src/lib.rs"
 [dependencies]
 ggez = "0.4"
 rand = "0.4.1"
-proptest = "0.4.2"
+proptest = "0.9"
 petgraph = "0.4.13"

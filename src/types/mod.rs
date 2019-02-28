@@ -400,6 +400,21 @@ impl HypotheticalInventory {
         counts
     }
 
+    pub fn drop(&mut self, item_ix: usize) -> Result<Item, &'static str> {
+        let item = drop_from_cells(&mut self.cells, item_ix)?;
+        let mut count = 0;
+        for option_cell in self.cells.iter() {
+            for cell in option_cell {
+                if cell.item == item {
+                    count += cell.count as usize
+                }
+            }
+        }
+        let item_min = self.minima.entry(item.clone()).or_insert(0);
+        *item_min = std::cmp::min(count, *item_min);
+        Ok(item)
+    }
+
     pub fn merge_in(&self, other: Inventory) -> Result<Inventory, String> {
         match other {
             Inventory::Actual(actual_other) => {
@@ -488,10 +503,17 @@ impl HypotheticalInventory {
                     let minimum = minima.entry(item).or_insert(0);
                     *minimum += extra;
                 }
-                //TODO: Merge minima
+                //AFIACT this can't be done in place, which is a bit distressing.
+                let merged_minima = minima
+                    .into_iter()
+                    .filter_map(|(item, minimum)| {
+                        let other_minimum = other_minima.get(&item)?;
+                        Some((item, std::cmp::min(minimum, *other_minimum)))
+                    })
+                    .collect();
                 Ok(Inventory::Hypothetical(HypotheticalInventory {
                     cells,
-                    minima,
+                    minima: merged_minima,
                     constraints: other_constraints,
                 }))
             }
@@ -508,6 +530,9 @@ impl ActualInventory {
         ActualInventory {
             cells: Default::default(),
         }
+    }
+    pub fn drop(&mut self, item_ix: usize) -> Result<Item, &'static str> {
+        drop_from_cells(&mut self.cells, item_ix)
     }
 }
 
@@ -596,6 +621,21 @@ fn remove_from_cells(
     Err(count)
 }
 
+fn drop_from_cells(
+    cells: &mut [Option<InventoryCell>],
+    item_ix: usize,
+) -> Result<Item, &'static str> {
+    let inventory_cell = cells[item_ix]
+        .as_mut()
+        .ok_or("Tried to drop from empty inventory slot")?;
+    inventory_cell.count -= 1;
+    let item = inventory_cell.item.clone();
+    if inventory_cell.count == 0 {
+        cells[item_ix as usize] = None;
+    };
+    Ok(item)
+}
+
 #[derive(Clone, Debug)]
 pub enum Inventory {
     Actual(ActualInventory),
@@ -606,27 +646,10 @@ impl Inventory {
         insert_into_cells(self.cells_mut(), item)
     }
     pub fn drop(&mut self, item_ix: usize) -> Result<Item, &'static str> {
-        let inventory_cell = self.cells_mut()[item_ix]
-            .as_mut()
-            .ok_or("Tried to drop from empty inventory slot")?;
-        inventory_cell.count -= 1;
-        let item = inventory_cell.item.clone();
-        if inventory_cell.count == 0 {
-            self.cells_mut()[item_ix as usize] = None;
-        };
-        if let Inventory::Hypothetical(ref mut hypothetical) = *self {
-            let mut count = 0;
-            for option_cell in hypothetical.cells.iter() {
-                for cell in option_cell {
-                    if cell.item == item {
-                        count += cell.count as usize
-                    }
-                }
-            }
-            let item_min = hypothetical.minima.entry(item.clone()).or_insert(0);
-            *item_min = std::cmp::min(count, *item_min);
+        match self {
+            Inventory::Actual(actual) => actual.drop(item_ix),
+            Inventory::Hypothetical(hypothetical) => hypothetical.drop(item_ix),
         }
-        Ok(item)
     }
     pub fn cells(&self) -> &[Option<InventoryCell>; 32] {
         match *self {
@@ -723,6 +746,121 @@ impl ItemDrop {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn test_merge_in() {}
+    use super::{
+        add_to_cells, ActualInventory, HypotheticalInventory, Inventory, InventoryCell, Item, Key,
+    };
+    use proptest::arbitrary::{any, Arbitrary};
+    use proptest::strategy::{BoxedStrategy, Strategy};
+
+    impl Arbitrary for Item {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Item>;
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            (0u8..1)
+                .prop_map(|n| match n {
+                    0 => Item::Key(Key {}),
+                    _ => panic!("Generated impossible discriminant for item"),
+                })
+                .boxed()
+        }
+    }
+
+    impl Arbitrary for InventoryCell {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<InventoryCell>;
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            (any::<Item>(), any::<u8>())
+                .prop_map(|(item, count)| InventoryCell { item, count })
+                .boxed()
+        }
+    }
+
+    impl Arbitrary for ActualInventory {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<ActualInventory>;
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<[Option<InventoryCell>; 32]>()
+                .prop_map(|cells| ActualInventory { cells })
+                .boxed()
+        }
+    }
+    proptest! {
+        #[test]
+        fn test_merge_in_empty_hypothetical(actual in any::<ActualInventory>()) {
+            let hypothetical = HypotheticalInventory::new();
+            let initial_counts = HypotheticalInventory::count_items(&actual.cells);
+            let merged = hypothetical.merge_in(Inventory::Actual(actual)).expect("Merge failed");
+            let merged_counts = HypotheticalInventory::count_items(merged.cells());
+            assert_eq!(initial_counts, merged_counts);
+        }
+    }
+    proptest! {
+        #[test]
+        fn test_merge_in_wished_hypothetical(actual in any::<ActualInventory>(),
+                                             item in any::<Item>(),
+                                             count in any::<u8>()) {
+            let mut hypothetical = HypotheticalInventory::new();
+            for _ in 0..count {
+                hypothetical.wish(item.clone(), 0).expect("Wishing failed");
+            }
+            let initial_counts = HypotheticalInventory::count_items(&actual.cells);
+            let merged = hypothetical.merge_in(Inventory::Actual(actual)).expect("Merge failed");
+            let merged_counts = HypotheticalInventory::count_items(merged.cells());
+            assert_eq!(initial_counts, merged_counts);
+        }
+    }
+    proptest! {
+        #[test]
+        fn test_merge_in_too_many_drops( item in any::<Item>(),
+                                         mut numbers in any::<[u8; 3]>()) {
+            numbers.sort_unstable();
+            let [available, drop_count, wish_count] = numbers;
+            if available == drop_count {
+                return Ok(());
+            }
+            let mut hypothetical = HypotheticalInventory::new();
+            for _ in 0..wish_count {
+                hypothetical.wish(item.clone(), 0).expect("Wishing failed");
+            }
+            for _ in 0..drop_count {
+                hypothetical.drop(0).expect("Dropping failed");
+            }
+            let mut actual = ActualInventory::new();
+            add_to_cells(&mut actual.cells, &item, available as usize).expect("Adding items to actual failed");
+
+            hypothetical.merge_in(Inventory::Actual(actual)).expect_err("Merge succeeded");
+        }
+    }
+    proptest! {
+        #[test]
+        fn test_merge_in_enough_drops( item in any::<Item>(),
+                                         mut numbers in any::<[u8; 3]>()) {
+            numbers.sort_unstable();
+            let [drop_count, available, wish_count] = numbers;
+            let mut hypothetical = HypotheticalInventory::new();
+            for _ in 0..wish_count {
+                hypothetical.wish(item.clone(), 0).expect("Wishing failed");
+            }
+            for _ in 0..drop_count {
+                hypothetical.drop(0).expect("Dropping failed");
+            }
+            let mut actual = ActualInventory::new();
+            add_to_cells(&mut actual.cells, &item, available as usize).expect("Adding items to actual failed");
+            use std::collections::HashMap;
+            let expected_counts : HashMap<Item, usize> =
+                if available > drop_count {
+                    [(item, (available - drop_count) as usize)]
+                    .iter()
+                    .cloned()
+                    .collect()
+                } else {
+                    HashMap::new()
+                };
+            let merged = hypothetical.merge_in(Inventory::Actual(actual)).expect("Merge failed");
+            let merged_counts = HypotheticalInventory::count_items(merged.cells());
+            assert_eq!(expected_counts, merged_counts);
+        }
+    }
+    //TODO: Hypothetical self merge should yield self
+    //May need an actual unit test here.
 }

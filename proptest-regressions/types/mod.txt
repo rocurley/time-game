@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc d0e8f9acabf11736cabe89973d41749dd367a6664612ed2d41c0617564a01daf # shrinks to actual = ActualInventory { cells: [None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, Some(InventoryCell { item: Key(Key), count: 0 })] }
+cc c85a8d18fa93b1943cb479e0877c481da9bb26e6bc44c2e20770d49bf90a5686 # shrinks to item = Key(Key), mut numbers = [195, 195, 195]
