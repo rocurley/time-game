@@ -76,9 +76,6 @@ impl<T> DoubleMap<T> {
     pub fn iter<'a, 'b: 'a>(&'b self) -> hash_map::Iter<'a, Id<T>, T> {
         self.by_id.iter()
     }
-    pub fn into_iter(self) -> hash_map::IntoIter<Id<T>, T> {
-        self.by_id.into_iter()
-    }
     pub fn contains_id(&self, id: &Id<T>) -> bool {
         self.by_id.contains_key(id)
     }

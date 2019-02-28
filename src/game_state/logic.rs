@@ -256,10 +256,11 @@ mod tests {
     }
 
     proptest! {
+        #[allow(clippy::unnecessary_operation)] //Can't figure this one out
         #[test]
         fn test_apply_plan(ref game_frames in unfold_arbitrary_plans(10)) {
             for frame in game_frames.iter() {
-                prop_assert_eq!(frame.players.len() - frame.portals.len(), 1)
+                prop_assert_eq!(frame.players.len() - frame.portals.len(), 1);
             }
         }
     }
