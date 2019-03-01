@@ -6,7 +6,7 @@ use std::f32::consts::PI;
 
 use ggez::nalgebra;
 use ggez::nalgebra::{Similarity2, Vector2};
-use petgraph::dot::{Config, Dot};
+use petgraph::dot::Dot;
 
 use game_frame::*;
 use types::*;
@@ -329,10 +329,7 @@ impl event::EventHandler for GameState {
                 Ok(new_frame) => {
                     for (item_type, item_portal_graph) in new_frame.item_portal_graphs.iter() {
                         println!("{:?}", item_type);
-                        println!(
-                            "{:?}",
-                            Dot::with_config(&item_portal_graph, &[Config::EdgeNoLabel])
-                        );
+                        println!("{:?}", Dot::with_config(&item_portal_graph, &[]));
                     }
                     match self.current_plan {
                         CachablePlan::Novel(ref mut plan) => {

@@ -1,6 +1,6 @@
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction::Incoming;
-use types::{GameError, Id, ItemDrop, Player, Portal};
+use types::{Id, ItemDrop, Player, Portal};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum PlayerPortalGraphNode {
@@ -18,7 +18,7 @@ pub enum ItemPortalGraphNode {
 }
 
 pub type PlayerPortalGraph = DiGraphMap<PlayerPortalGraphNode, Id<Player>>;
-pub type ItemPortalGraph = DiGraphMap<ItemPortalGraphNode, ()>;
+pub type ItemPortalGraph = DiGraphMap<ItemPortalGraphNode, usize>;
 
 #[allow(dead_code)]
 pub fn find_trail_from_origin(
@@ -64,10 +64,7 @@ pub fn wish(graph: &mut PlayerPortalGraph, id: Id<Player>) -> Result<(), GameErr
 }
 */
 
-pub fn find_latest_held(
-    graph: &ItemPortalGraph,
-    player_id: Id<Player>,
-) -> Option<ItemPortalGraphNode> {
+pub fn find_latest_held_index(graph: &ItemPortalGraph, player_id: Id<Player>) -> Option<usize> {
     if !graph.contains_node(ItemPortalGraphNode::Held(player_id, 0)) {
         return None;
     }
@@ -75,5 +72,12 @@ pub fn find_latest_held(
     while graph.contains_node(ItemPortalGraphNode::Held(player_id, last + 1)) {
         last += 1;
     }
-    Some(ItemPortalGraphNode::Held(player_id, last))
+    Some(last)
+}
+
+pub fn find_latest_held(
+    graph: &ItemPortalGraph,
+    player_id: Id<Player>,
+) -> Option<ItemPortalGraphNode> {
+    find_latest_held_index(graph, player_id).map(|i| ItemPortalGraphNode::Held(player_id, i))
 }

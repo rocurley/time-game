@@ -2,7 +2,9 @@ use petgraph::graphmap::GraphMap;
 
 use game_frame::GameFrame;
 use ggez::nalgebra;
-use portal_graph::{find_latest_held, ItemPortalGraphNode, PlayerPortalGraphNode};
+use portal_graph::{
+    find_latest_held, find_latest_held_index, ItemPortalGraphNode, PlayerPortalGraphNode,
+};
 use types::{
     Direction, DoubleMap, GameError, HypotheticalInventory, Id, Inventory, ItemDrop, Move, Plan,
     Player, Portal,
@@ -66,12 +68,13 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 ) {
                     Err("Created infinite loop")?;
                 }
-                for (_, item_portal_graph) in item_portal_graphs.iter_mut() {
+                let item_counts = old_player.inventory.count_items();
+                for (item, item_portal_graph) in item_portal_graphs.iter_mut() {
                     if let Some(origin_node) = find_latest_held(item_portal_graph, old_player.id) {
                         item_portal_graph.add_edge(
                             origin_node,
                             ItemPortalGraphNode::Held(new_player_id, 0),
-                            (),
+                            item_counts[item],
                         );
                     }
                 }
@@ -83,6 +86,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                     .remove_by_position(&player.position)
                     .ok_or("Couln't pick up: no item")?;
                 let item = item_drop.item;
+                let prior_item_count = player.inventory.count_items().get(&item).map_or(0, |x| *x);
                 let item_portal_graph = item_portal_graphs
                     .entry(item.clone())
                     .or_insert_with(GraphMap::new);
@@ -94,8 +98,15 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 item_portal_graph.add_edge(
                     ItemPortalGraphNode::Dropped(item_drop.id),
                     ItemPortalGraphNode::Held(player.id, new_held_ix),
-                    (),
+                    1,
                 );
+                if prior_item_count > 0 {
+                    item_portal_graph.add_edge(
+                        ItemPortalGraphNode::Held(player.id, new_held_ix - 1),
+                        ItemPortalGraphNode::Held(player.id, new_held_ix),
+                        prior_item_count,
+                    );
+                }
                 player.inventory.insert(&item)?;
                 players.insert(player)?;
             }
@@ -104,11 +115,8 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 //things.
                 let mut player: Player = old_player.clone();
                 let item = player.inventory.drop(item_ix)?;
-                let still_holding = player
-                    .inventory
-                    .cells()
-                    .iter()
-                    .any(|o_cell| o_cell.as_ref().map_or(false, |cell| cell.item == item));
+                let remaining_item_count =
+                    player.inventory.count_items().get(&item).map_or(0, |x| *x);
                 let item_drop = ItemDrop::new(item.clone(), player.position);
                 let player_id = player.id;
                 let item_drop_id = item_drop.id;
@@ -117,23 +125,17 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 let item_portal_graph = item_portal_graphs
                     .entry(item.clone())
                     .or_insert_with(GraphMap::new);
-                let next_held_ix = (0usize..)
-                    .find(|&i| {
-                        !item_portal_graph.contains_node(ItemPortalGraphNode::Held(player_id, i))
-                    })
-                    .expect("Exhausted usize looking for unused held index");
+                let latest_held_index =
+                    find_latest_held_index(item_portal_graph, player_id).unwrap_or(0);
+                let latest_held = ItemPortalGraphNode::Held(player_id, latest_held_index);
                 item_portal_graph.add_edge(
-                    ItemPortalGraphNode::Held(player_id, next_held_ix - 1),
+                    latest_held,
                     ItemPortalGraphNode::Dropped(item_drop_id),
-                    (),
+                    1,
                 );
-                //I'm skeptical that this can ever matter.
-                if still_holding {
-                    item_portal_graph.add_edge(
-                        ItemPortalGraphNode::Dropped(item_drop_id),
-                        ItemPortalGraphNode::Held(player_id, next_held_ix),
-                        (),
-                    );
+                if remaining_item_count > 0 {
+                    let next_held = ItemPortalGraphNode::Held(player_id, latest_held_index + 1);
+                    item_portal_graph.add_edge(latest_held, next_held, remaining_item_count);
                 }
             }
         }

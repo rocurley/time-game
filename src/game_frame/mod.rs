@@ -39,7 +39,11 @@ impl GameFrame {
             item_portal_graphs: HashMap::new(),
         }
     }
-    pub fn insert_item_drop(&mut self, drop: ItemDrop) -> Result<(), GameError> {
+    pub fn insert_item_drop(
+        &mut self,
+        drop: ItemDrop,
+        prior_item_count: usize,
+    ) -> Result<(), GameError> {
         let item_portal_graph = self
             .item_portal_graphs
             .entry(drop.item.clone())
@@ -47,7 +51,7 @@ impl GameFrame {
         item_portal_graph.add_edge(
             ItemPortalGraphNode::Beginning,
             ItemPortalGraphNode::Dropped(drop.id),
-            (),
+            prior_item_count,
         );
         self.items.insert(drop)?;
         Ok(())

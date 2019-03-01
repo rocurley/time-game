@@ -327,6 +327,17 @@ pub struct InventoryCell {
     pub count: u8,
 }
 
+fn count_cells_items(cells: &[Option<InventoryCell>]) -> HashMap<Item, usize> {
+    let mut counts = HashMap::new();
+    for option_cell in cells {
+        if let Some(cell) = option_cell {
+            let count = counts.entry(cell.item.clone()).or_insert(0);
+            *count += cell.count as usize;
+        }
+    }
+    counts
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct HypotheticalInventory {
     pub cells: [Option<InventoryCell>; 32],
@@ -389,17 +400,6 @@ impl HypotheticalInventory {
         Ok(())
     }
 
-    fn count_items(cells: &[Option<InventoryCell>]) -> HashMap<Item, usize> {
-        let mut counts = HashMap::new();
-        for option_cell in cells {
-            if let Some(cell) = option_cell {
-                let count = counts.entry(cell.item.clone()).or_insert(0);
-                *count += cell.count as usize;
-            }
-        }
-        counts
-    }
-
     pub fn drop(&mut self, item_ix: usize) -> Result<Item, &'static str> {
         let item = drop_from_cells(&mut self.cells, item_ix)?;
         let mut count = 0;
@@ -413,6 +413,10 @@ impl HypotheticalInventory {
         let item_min = self.minima.entry(item.clone()).or_insert(0);
         *item_min = std::cmp::min(count, *item_min);
         Ok(item)
+    }
+
+    pub fn count_items(&self) -> HashMap<Item, usize> {
+        count_cells_items(&self.cells)
     }
 
     pub fn merge_in(&self, other: Inventory) -> Result<Inventory, String> {
@@ -464,7 +468,7 @@ impl HypotheticalInventory {
                 //we can wish up the current inventory. Once the inventories match up,
                 //we merge the minima and we're done.
                 //
-                let mut extras = HypotheticalInventory::count_items(&hypothetical_other.cells);
+                let mut extras = count_cells_items(&hypothetical_other.cells);
                 let mut other_minima = hypothetical_other.minima.clone();
                 let mut other_constraints = hypothetical_other.constraints.clone();
                 let mut self_constraints = self.constraints.clone();
@@ -533,6 +537,9 @@ impl ActualInventory {
     }
     pub fn drop(&mut self, item_ix: usize) -> Result<Item, &'static str> {
         drop_from_cells(&mut self.cells, item_ix)
+    }
+    pub fn count_items(&self) -> HashMap<Item, usize> {
+        count_cells_items(&self.cells)
     }
 }
 
@@ -663,6 +670,12 @@ impl Inventory {
             Inventory::Hypothetical(ref mut inventory) => &mut inventory.cells,
         }
     }
+    pub fn count_items(&self) -> HashMap<Item, usize> {
+        match self {
+            Inventory::Actual(actual) => actual.count_items(),
+            Inventory::Hypothetical(hypothetical) => hypothetical.count_items(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -788,9 +801,9 @@ mod tests {
         #[test]
         fn test_merge_in_empty_hypothetical(actual in any::<ActualInventory>()) {
             let hypothetical = HypotheticalInventory::new();
-            let initial_counts = HypotheticalInventory::count_items(&actual.cells);
+            let initial_counts = actual.count_items();
             let merged = hypothetical.merge_in(Inventory::Actual(actual)).expect("Merge failed");
-            let merged_counts = HypotheticalInventory::count_items(merged.cells());
+            let merged_counts = merged.count_items();
             assert_eq!(initial_counts, merged_counts);
         }
     }
@@ -803,9 +816,9 @@ mod tests {
             for _ in 0..count {
                 hypothetical.wish(item.clone(), 0).expect("Wishing failed");
             }
-            let initial_counts = HypotheticalInventory::count_items(&actual.cells);
+            let initial_counts = actual.count_items();
             let merged = hypothetical.merge_in(Inventory::Actual(actual)).expect("Merge failed");
-            let merged_counts = HypotheticalInventory::count_items(merged.cells());
+            let merged_counts = merged.count_items();
             assert_eq!(initial_counts, merged_counts);
         }
     }
@@ -857,7 +870,7 @@ mod tests {
                     HashMap::new()
                 };
             let merged = hypothetical.merge_in(Inventory::Actual(actual)).expect("Merge failed");
-            let merged_counts = HypotheticalInventory::count_items(merged.cells());
+            let merged_counts = merged.count_items();
             assert_eq!(expected_counts, merged_counts);
         }
     }
