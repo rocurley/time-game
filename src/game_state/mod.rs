@@ -107,24 +107,19 @@ impl GameState {
                             .expect("Selection target player id invalid");
                         if let Some(cell) = target_player.inventory.cells()[ix].as_ref() {
                             let item = cell.item.clone();
-                            frame.players.mutate_by_id(
-                                &player_id,
-                                |mut player| -> Result<Player, GameError> {
-                                    match player.inventory {
-                                        Inventory::Actual(_) => {
-                                            panic!("Wishing from actual inventory")
-                                        }
-                                        Inventory::Hypothetical(ref mut hypothetical) => {
-                                            hypothetical.wish(item, ix)?;
-                                            *selection = Selection::Inventory(player_id, Some(ix));
-                                            Ok(player)
-                                        }
-                                    }
-                                },
-                            )
-                        } else {
-                            Ok(())
+                            let mut player = frame
+                                .players
+                                .get_mut_by_id(player_id)
+                                .expect("Couldn't find player by id");
+                            match player.inventory {
+                                Inventory::Actual(_) => panic!("Wishing from actual inventory"),
+                                Inventory::Hypothetical(ref mut hypothetical) => {
+                                    hypothetical.wish(item, ix)?;
+                                    *selection = Selection::Inventory(player_id, Some(ix));
+                                }
+                            }
                         }
+                        Ok(())
                     }
                     _ => panic!("Invalid selection type returned from `inventory_selection`"),
                 }
@@ -257,18 +252,16 @@ impl event::EventHandler for GameState {
                     }
                 }
                 Keycode::Minus => {
-                    let wish_result = self.history.get_focus_val_mut().players.mutate_by_id(
-                        &player_id,
-                        |mut player| -> Result<Player, GameError> {
-                            if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory
-                            {
-                                hypothetical.unwish(ix)?
-                            }
-                            Ok(player)
-                        },
-                    );
-                    if let Err(err) = wish_result {
-                        println!("{}", err)
+                    let mut player = self
+                        .history
+                        .get_focus_val_mut()
+                        .players
+                        .get_mut_by_id(player_id)
+                        .expect("Couldn't find player by id");
+                    if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory {
+                        if let Err(err) = hypothetical.unwish(ix) {
+                            println!("{}", err)
+                        }
                     }
                 }
                 _ => {}

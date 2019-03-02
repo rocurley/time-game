@@ -150,16 +150,16 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
         );
     }
     for (player_id, old_inventory) in inventories_to_merge {
-        players.mutate_by_id(&player_id, |mut player| -> Result<Player, GameError> {
-            match player.inventory {
-                Inventory::Actual(_) => panic!("Merged into an actual inventory"),
-                Inventory::Hypothetical(ref inventory) => {
-                    let new_inventory = inventory.merge_in(old_inventory.clone())?;
-                    player.inventory = new_inventory;
-                }
+        let mut player = players
+            .get_mut_by_id(player_id)
+            .expect("Couldn't get player by id");
+        match player.inventory {
+            Inventory::Actual(_) => panic!("Merged into an actual inventory"),
+            Inventory::Hypothetical(ref inventory) => {
+                let new_inventory = inventory.merge_in(old_inventory.clone())?;
+                (*player).inventory = new_inventory;
             }
-            Ok(player)
-        })?;
+        }
     }
     Ok(GameFrame {
         players,

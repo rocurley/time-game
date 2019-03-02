@@ -76,31 +76,25 @@ impl GameFrame {
         let players = &mut self.players;
         let item_portal_graphs = &mut self.item_portal_graphs;
         let player_portal_graph = &self.player_portal_graph;
-        let mut no_item = false;
-        players
-            .mutate_by_id(&player_id, |mut player| -> Result<Player, GameError> {
-                if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory {
-                    let item = match (clicked_item, &hypothetical.cells[ix]) {
-                        (None, None) => {
-                            no_item = true;
-                            return Ok(player);
-                        }
-                        (Some(item), None) => item,
-                        (None, Some(ref cell)) => cell.item.clone(),
-                        (Some(_), Some(_)) => panic!("Selected item for wish into occupied cell"),
-                    };
-                    let item_portal_graph = item_portal_graphs.entry(item.clone()).or_default();
-                    hypothetical.wish(item, ix)?;
-                    portal_graph::wish(item_portal_graph, player_portal_graph, player_id, 1);
+        let mut player = players
+            .get_mut_by_id(player_id)
+            .expect("Couldn't find player in players");
+        if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory {
+            let item = match (clicked_item, &hypothetical.cells[ix]) {
+                (None, None) => {
+                    return FrameWishResult::NoItem;
                 }
-                Ok(player)
-            })
-            .expect("couldn't find player in players");
-        if no_item {
-            FrameWishResult::NoItem
-        } else {
-            FrameWishResult::Success
+                (Some(item), None) => item,
+                (None, Some(ref cell)) => cell.item.clone(),
+                (Some(_), Some(_)) => panic!("Selected item for wish into occupied cell"),
+            };
+            let item_portal_graph = item_portal_graphs.entry(item.clone()).or_default();
+            hypothetical
+                .wish(item, ix)
+                .expect("Couldn't find player in players");
+            portal_graph::wish(item_portal_graph, player_portal_graph, player_id, 1);
         }
+        FrameWishResult::Success
     }
 }
 

@@ -6,6 +6,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 pub const SCALE: f32 = 100.;
 pub const INVENTORY_WIDTH: usize = 8;
@@ -105,6 +106,40 @@ impl<T> DoubleMap<T> {
 
 pub type GameError = Cow<'static, str>;
 
+pub struct DoubleMapRef<'a, T: DoubleMappable> {
+    value: Option<T>,
+    map: &'a mut DoubleMap<T>,
+}
+
+impl<'a, T: DoubleMappable> Deref for DoubleMapRef<'a, T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        self.value
+            .as_ref()
+            .expect("DoubleMapRef value missing before drop")
+    }
+}
+
+impl<'a, T: DoubleMappable> DerefMut for DoubleMapRef<'a, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        self.value
+            .as_mut()
+            .expect("DoubleMapRef value missing before drop")
+    }
+}
+
+impl<'a, T: DoubleMappable> Drop for DoubleMapRef<'a, T> {
+    fn drop(&mut self) {
+        let v = self
+            .value
+            .take()
+            .expect("DoubleMapRef value missing at drop");
+        self.map
+            .insert(v)
+            .unwrap_or_else(|err| panic!("Error inserting back into map: {}", &err))
+    }
+}
+
 #[allow(clippy::trivially_copy_pass_by_ref)]
 impl<T> DoubleMap<T>
 where
@@ -135,15 +170,9 @@ where
             t
         })
     }
-    pub fn mutate_by_id<F, E>(&mut self, id: &Id<T>, f: F) -> Result<(), GameError>
-    where
-        F: FnOnce(T) -> Result<T, E>,
-        GameError: From<E>,
-    {
-        let t_orig = self.remove_by_id(id).ok_or("Id missing")?;
-        let t_final = f(t_orig)?;
-        self.insert(t_final)?;
-        Ok(())
+    pub fn get_mut_by_id<'a, 'b: 'a>(&'b mut self, id: Id<T>) -> Option<DoubleMapRef<'a, T>> {
+        let value = Some(self.remove_by_id(&id)?);
+        Some(DoubleMapRef { value, map: self })
     }
 }
 
