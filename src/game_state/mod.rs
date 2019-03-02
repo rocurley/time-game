@@ -252,16 +252,9 @@ impl event::EventHandler for GameState {
                     }
                 }
                 Keycode::Minus => {
-                    let mut player = self
-                        .history
-                        .get_focus_val_mut()
-                        .players
-                        .get_mut_by_id(player_id)
-                        .expect("Couldn't find player by id");
-                    if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory {
-                        if let Err(err) = hypothetical.unwish(ix) {
-                            println!("{}", err)
-                        }
+                    let game_frame = self.history.get_focus_val_mut();
+                    if let Err(err) = game_frame.unwish(player_id, ix) {
+                        println!("{}", err)
                     }
                 }
                 _ => {}
@@ -271,6 +264,7 @@ impl event::EventHandler for GameState {
             | Selection::WishPicker(_, _)
             | Selection::WishPickerInventoryViewer(_, _, _) => {}
         }
+
         match key {
             Keycode::Tab => {
                 if let Err(err) = self.rotate_plan() {

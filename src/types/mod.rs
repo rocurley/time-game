@@ -448,6 +448,8 @@ impl HypotheticalInventory {
         count_cells_items(&self.cells)
     }
 
+    //TODO: We need to be able to update the item graph when you merge inventories, since this
+    //involves wishing and unwishing.
     pub fn merge_in(&self, other: Inventory) -> Result<Inventory, String> {
         match other {
             Inventory::Actual(actual_other) => {

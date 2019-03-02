@@ -106,8 +106,6 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 players.insert(player)?;
             }
             Some(&Move::Drop(item_ix)) => {
-                //TODO: We need to be able to update the item graph live as you wish and unwish for
-                //things.
                 let mut player: Player = old_player.clone();
                 let item = player.inventory.drop(item_ix)?;
                 let remaining_item_count =

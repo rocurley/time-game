@@ -96,6 +96,28 @@ impl GameFrame {
         }
         FrameWishResult::Success
     }
+    pub fn unwish(
+        &mut self,
+        player_id: Id<Player>,
+        ix: usize,
+    ) -> Result<FrameWishResult, GameError> {
+        let players = &mut self.players;
+        let item_portal_graphs = &mut self.item_portal_graphs;
+        let player_portal_graph = &self.player_portal_graph;
+        let mut player = players
+            .get_mut_by_id(player_id)
+            .expect("Couldn't find player in players");
+        if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory {
+            let item = match hypothetical.cells[ix] {
+                None => return Ok(FrameWishResult::NoItem),
+                Some(ref cell) => cell.item.clone(),
+            };
+            let item_portal_graph = item_portal_graphs.entry(item.clone()).or_default();
+            hypothetical.unwish(ix)?;
+            portal_graph::unwish(item_portal_graph, player_portal_graph, player_id, 1);
+        }
+        Ok(FrameWishResult::Success)
+    }
 }
 
 pub enum FrameWishResult {
