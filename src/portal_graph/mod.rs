@@ -20,11 +20,10 @@ pub enum ItemPortalGraphNode {
 pub type PlayerPortalGraph = DiGraphMap<PlayerPortalGraphNode, Id<Player>>;
 pub type ItemPortalGraph = DiGraphMap<ItemPortalGraphNode, usize>;
 
-#[allow(dead_code)]
 pub fn find_trail_from_origin(
     graph: &PlayerPortalGraph,
     id: Id<Player>,
-) -> Option<Vec<PlayerPortalGraphNode>> {
+) -> Option<Vec<Id<Player>>> {
     let nodes: Vec<PlayerPortalGraphNode> = graph
         .neighbors_directed(PlayerPortalGraphNode::End, Incoming)
         .filter(|n| {
@@ -39,7 +38,7 @@ pub fn find_trail_from_origin(
         [node] => Some(node),
         _ => panic!("Multiple edges with same player id"),
     }?;
-    let mut nodes: Vec<PlayerPortalGraphNode> = Vec::new();
+    let mut edges = vec![id];
     loop {
         match *graph
             .neighbors_directed(node, Incoming)
@@ -47,22 +46,87 @@ pub fn find_trail_from_origin(
             .as_slice()
         {
             [] => break,
-            [mut new_node] => {
-                std::mem::swap(&mut node, &mut new_node);
-                nodes.push(new_node);
+            [new_node] => {
+                let e = graph
+                    .edge_weight(new_node, node)
+                    .expect("Edge listed in neighbors not found");
+                edges.push(*e);
+                node = new_node;
             }
             _ => panic!("Multiple incomming edges"),
         }
     }
-    nodes.push(node);
-    Some(nodes)
+    Some(edges)
 }
 
-/*
-pub fn wish(graph: &mut PlayerPortalGraph, id: Id<Player>) -> Result<(), GameError> {
-    let trail = find_trail_from_origin(graph, id).ok_or("Couldn't find player origin.")?;
+fn player_held_nodes(
+    graph: &ItemPortalGraph,
+    player_graph: &PlayerPortalGraph,
+    id: Id<Player>,
+) -> Option<Vec<ItemPortalGraphNode>> {
+    let player_ids = find_trail_from_origin(player_graph, id)?;
+    println!("player_held_nodes");
+    println!("{:?}", player_ids);
+    let mut held_nodes = Vec::new();
+    for player_id in player_ids {
+        held_nodes.push(ItemPortalGraphNode::Held(player_id, 0));
+        held_nodes.extend(
+            (1..)
+                .map(|i| ItemPortalGraphNode::Held(player_id, i))
+                .take_while(|n| graph.contains_node(*n)),
+        )
+    }
+    Some(held_nodes)
 }
-*/
+
+pub fn wish(
+    graph: &mut ItemPortalGraph,
+    player_graph: &PlayerPortalGraph,
+    id: Id<Player>,
+    count: usize,
+) {
+    println!("portal_graph::wish");
+    let held_nodes =
+        player_held_nodes(graph, player_graph, id).expect("Couldn't find player in portal graph");
+    if let Some((mut last_node, tail)) = held_nodes.split_first() {
+        for node in tail {
+            match graph.edge_weight_mut(*last_node, *node) {
+                //The "existing edge" case doesn't seem to work
+                Some(existing_edge) => *existing_edge += count,
+                None => {
+                    graph.add_edge(*last_node, *node, count);
+                }
+            }
+            last_node = node;
+        }
+    }
+}
+
+pub fn unwish(
+    graph: &mut ItemPortalGraph,
+    player_graph: &PlayerPortalGraph,
+    id: Id<Player>,
+    count: usize,
+) {
+    let held_nodes =
+        player_held_nodes(graph, player_graph, id).expect("Couldn't find player in portal graph");
+    if let Some((mut last_node, tail)) = held_nodes.split_first() {
+        for node in tail {
+            let existing_edge = graph
+                .edge_weight_mut(*last_node, *node)
+                .expect("unwished but edge was empty");
+            use std::cmp::Ordering;
+            match (*existing_edge).cmp(&count) {
+                Ordering::Less => panic!("Unwished but edge was too small"),
+                Ordering::Equal => {
+                    graph.remove_edge(*last_node, *node);
+                }
+                Ordering::Greater => *existing_edge -= count,
+            }
+            last_node = node;
+        }
+    }
+}
 
 pub fn find_latest_held_index(graph: &ItemPortalGraph, player_id: Id<Player>) -> Option<usize> {
     if !graph.contains_node(ItemPortalGraphNode::Held(player_id, 0)) {

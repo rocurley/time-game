@@ -90,23 +90,18 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 let item_portal_graph = item_portal_graphs
                     .entry(item.clone())
                     .or_insert_with(GraphMap::new);
-                let new_held_ix = (0usize..)
-                    .find(|&i| {
-                        !item_portal_graph.contains_node(ItemPortalGraphNode::Held(player.id, i))
-                    })
-                    .expect("Exhausted usize looking for unused held index");
+                let old_held_ix = find_latest_held_index(item_portal_graph, player.id).unwrap_or(0);
+                let new_held_ix = old_held_ix + 1;
                 item_portal_graph.add_edge(
                     ItemPortalGraphNode::Dropped(item_drop.id),
                     ItemPortalGraphNode::Held(player.id, new_held_ix),
                     1,
                 );
-                if prior_item_count > 0 {
-                    item_portal_graph.add_edge(
-                        ItemPortalGraphNode::Held(player.id, new_held_ix - 1),
-                        ItemPortalGraphNode::Held(player.id, new_held_ix),
-                        prior_item_count,
-                    );
-                }
+                item_portal_graph.add_edge(
+                    ItemPortalGraphNode::Held(player.id, old_held_ix),
+                    ItemPortalGraphNode::Held(player.id, new_held_ix),
+                    prior_item_count,
+                );
                 player.inventory.insert(&item)?;
                 players.insert(player)?;
             }

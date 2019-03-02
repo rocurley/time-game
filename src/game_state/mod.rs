@@ -83,22 +83,10 @@ impl GameState {
                     let frame = self.history.get_focus_val_mut();
                     let selection = &mut self.selected;
                     if let Some(item_drop) = frame.items.get_by_position(&tile_pt) {
-                        frame.players.mutate_by_id(
-                            &player_id,
-                            |mut player| -> Result<Player, GameError> {
-                                match player.inventory {
-                                    Inventory::Actual(_) => panic!("Wishing from actual inventory"),
-                                    Inventory::Hypothetical(ref mut hypothetical) => {
-                                        hypothetical.wish(item_drop.item.clone(), ix)?;
-                                        *selection = Selection::Inventory(player_id, Some(ix));
-                                        Ok(player)
-                                    }
-                                }
-                            },
-                        )
-                    } else {
-                        Ok(())
+                        frame.wish(player_id, ix, Some(item_drop.item.clone()));
+                        *selection = Selection::Inventory(player_id, Some(ix));
                     }
+                    Ok(())
                 }
                 Selection::Player(target_player_id) => {
                     self.selected =
@@ -262,29 +250,10 @@ impl event::EventHandler for GameState {
                         .insert(player_id, Move::Drop(ix));
                 }
                 Keycode::Equals => {
-                    let selection = &mut self.selected;
                     let game_frame = self.history.get_focus_val_mut();
-                    let players = &mut game_frame.players;
-                    let item_portal_graphs = &mut game_frame.item_portal_graphs;
-                    let wish_result = players.mutate_by_id(
-                        &player_id,
-                        |mut player| -> Result<Player, GameError> {
-                            if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory
-                            {
-                                match hypothetical.cells[ix] {
-                                    Some(ref cell) => {
-                                        let item_portal_graph =
-                                            item_portal_graphs.get_mut(&cell.item);
-                                        hypothetical.wish(cell.item.clone(), ix)?;
-                                    }
-                                    None => *selection = Selection::WishPicker(player_id, ix),
-                                }
-                            }
-                            Ok(player)
-                        },
-                    );
-                    if let Err(err) = wish_result {
-                        println!("{}", err)
+                    let wish_result = game_frame.wish(player_id, ix, None);
+                    if let FrameWishResult::NoItem = wish_result {
+                        self.selected = Selection::WishPicker(player_id, ix);
                     }
                 }
                 Keycode::Minus => {

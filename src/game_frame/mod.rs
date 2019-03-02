@@ -1,9 +1,11 @@
 use petgraph::graphmap::GraphMap;
-use portal_graph::{ItemPortalGraph, PlayerPortalGraph};
-use portal_graph::{ItemPortalGraphNode, PlayerPortalGraphNode};
+use portal_graph;
+use portal_graph::{
+    ItemPortalGraph, ItemPortalGraphNode, PlayerPortalGraph, PlayerPortalGraphNode,
+};
 use std::collections::HashMap;
 use std::fmt;
-use types::{DoubleMap, GameError, Item, ItemDrop, Player, Portal};
+use types::{DoubleMap, GameError, Id, Inventory, Item, ItemDrop, Player, Portal};
 
 #[derive(Clone)]
 pub struct GameFrame {
@@ -65,4 +67,44 @@ impl GameFrame {
         self.players.insert(player)?;
         Ok(())
     }
+    pub fn wish(
+        &mut self,
+        player_id: Id<Player>,
+        ix: usize,
+        clicked_item: Option<Item>,
+    ) -> FrameWishResult {
+        let players = &mut self.players;
+        let item_portal_graphs = &mut self.item_portal_graphs;
+        let player_portal_graph = &self.player_portal_graph;
+        let mut no_item = false;
+        players
+            .mutate_by_id(&player_id, |mut player| -> Result<Player, GameError> {
+                if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory {
+                    let item = match (clicked_item, &hypothetical.cells[ix]) {
+                        (None, None) => {
+                            no_item = true;
+                            return Ok(player);
+                        }
+                        (Some(item), None) => item,
+                        (None, Some(ref cell)) => cell.item.clone(),
+                        (Some(_), Some(_)) => panic!("Selected item for wish into occupied cell"),
+                    };
+                    let item_portal_graph = item_portal_graphs.entry(item.clone()).or_default();
+                    hypothetical.wish(item, ix)?;
+                    portal_graph::wish(item_portal_graph, player_portal_graph, player_id, 1);
+                }
+                Ok(player)
+            })
+            .expect("couldn't find player in players");
+        if no_item {
+            FrameWishResult::NoItem
+        } else {
+            FrameWishResult::Success
+        }
+    }
+}
+
+pub enum FrameWishResult {
+    Success,
+    NoItem,
 }
