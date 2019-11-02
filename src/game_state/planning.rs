@@ -108,22 +108,12 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
         );
     }
     for prior_player in jumpers {
+        // Note that prior_player has not been inserted into players, nor will it be.
+        // First, we remove the portal.
         let portal = portals
             .remove_by_position(&prior_player.position)
             .ok_or("Tried to close loop at wrong position")?;
-        // Disconnect the player edge from end and connect it to the portal jumped into.
-        let (player_origin, _, _) = player_portal_graph
-            .all_edges()
-            .find(|(_, _, &edge)| edge == prior_player.id)
-            .expect("Couldn't find player in portal graph");
-        player_portal_graph
-            .remove_edge(player_origin, PlayerPortalGraphNode::End)
-            .expect("Tried to close portal when edge unconnected to End");
-        player_portal_graph.add_edge(
-            player_origin,
-            PlayerPortalGraphNode::Portal(portal.id),
-            prior_player.id,
-        );
+        // Next, we find the player we're merging into: "post_player"
         let post_player_id = match player_portal_graph
             .edges(PlayerPortalGraphNode::Portal(portal.id))
             .collect::<Vec<_>>()
@@ -135,37 +125,23 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 slice
             ),
         };
-        if !petgraph::algo::has_path_connecting(
-            &player_portal_graph,
-            PlayerPortalGraphNode::Portal(portal.id),
-            PlayerPortalGraphNode::End,
-            None,
-        ) {
-            Err("Created infinite loop")?;
-        }
-        let item_counts = prior_player.inventory.count_items();
-        for (item, item_portal_graph) in item_portal_graphs.iter_mut() {
-            if let Some(origin_node) = find_latest_held(item_portal_graph, prior_player.id) {
-                item_portal_graph.add_edge(
-                    origin_node,
-                    ItemPortalGraphNode::Held(post_player_id, 0),
-                    item_counts[item],
-                );
-            }
-        }
         let mut post_player = players
             .get_mut_by_id(post_player_id)
             .expect("Couldn't get post_player by id");
-        let inventory = match post_player.inventory {
+        // Merge the inventories
+        let post_inventory = match post_player.inventory {
             Inventory::Actual(_) => panic!("Merged into an actual inventory"),
             Inventory::Hypothetical(ref inventory) => inventory,
         };
-        // Merge the inventories
-        let (new_inventory, wishes) = inventory.merge_in(prior_player.inventory.clone())?;
-        (*post_player).inventory = new_inventory;
+        let (new_post_inventory, wishes) =
+            post_inventory.merge_in(prior_player.inventory.clone())?;
+        (*post_player).inventory = new_post_inventory;
         dbg!(&wishes);
         render_player_graph(&player_portal_graph);
-        // Propegate the merge-implied wishes to the item graph
+        // Propegate the merge-implied wishes to the item graph. We need to do this before
+        // modifying the players portal graph, or before adding the new edge to the item portal
+        // graphs. Conceptually, wishing and unwishing happens _before_ the portal closes, to make
+        // it valid to close the portal.
         for (item, prior_count, post_count) in wishes {
             let item_portal_graph = item_portal_graphs
                 .get_mut(&item)
@@ -180,8 +156,41 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 item_portal_graph,
                 &player_portal_graph,
                 post_player_id,
-                post_count - prior_count,
+                post_count,
             );
+        }
+        // Disconnect the player edge from end and connect it to the portal jumped into.
+        let (player_origin, _, _) = player_portal_graph
+            .all_edges()
+            .find(|(_, _, &edge)| edge == prior_player.id)
+            .expect("Couldn't find player in portal graph");
+        player_portal_graph
+            .remove_edge(player_origin, PlayerPortalGraphNode::End)
+            .expect("Tried to close portal when edge unconnected to End");
+        player_portal_graph.add_edge(
+            player_origin,
+            PlayerPortalGraphNode::Portal(portal.id),
+            prior_player.id,
+        );
+        // Check that the player can still reach end (no loops)
+        if !petgraph::algo::has_path_connecting(
+            &player_portal_graph,
+            PlayerPortalGraphNode::Portal(portal.id),
+            PlayerPortalGraphNode::End,
+            None,
+        ) {
+            Err("Created infinite loop")?;
+        }
+        // Add the edge linking prior and post players to the item portal graph
+        let item_counts = post_player.inventory.count_items();
+        for (item, item_portal_graph) in item_portal_graphs.iter_mut() {
+            if let Some(origin_node) = find_latest_held(item_portal_graph, prior_player.id) {
+                item_portal_graph.add_edge(
+                    origin_node,
+                    ItemPortalGraphNode::Held(post_player_id, 0),
+                    item_counts[item],
+                );
+            }
         }
         // Define a "source" as a node with items flowing out of it but none going in.
         // This corresponds either to wishing or beginning. Similarly, define a sink as
