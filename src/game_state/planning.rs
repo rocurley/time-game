@@ -137,27 +137,35 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
             post_inventory.merge_in(prior_player.inventory.clone())?;
         (*post_player).inventory = new_post_inventory;
         dbg!(&wishes);
-        render_player_graph(&player_portal_graph);
         // Propegate the merge-implied wishes to the item graph. We need to do this before
         // modifying the players portal graph, or before adding the new edge to the item portal
         // graphs. Conceptually, wishing and unwishing happens _before_ the portal closes, to make
         // it valid to close the portal.
-        for (item, prior_count, post_count) in wishes {
+        let mut item_counts = prior_player.inventory.count_items();
+        for (item, post_count, prior_count) in wishes {
+            let item_count = item_counts.entry(item.clone()).or_insert(0);
+            *item_count = (*item_count as i32 + prior_count) as usize;
             let item_portal_graph = item_portal_graphs
                 .get_mut(&item)
                 .expect("no item portal graph for existant item");
+            println!("Before wishing");
+            render_item_graph(item_portal_graph);
             signed_wish(
                 item_portal_graph,
                 &player_portal_graph,
                 prior_player.id,
                 prior_count,
             );
+            println!("After prior wishing");
+            render_item_graph(item_portal_graph);
             signed_wish(
                 item_portal_graph,
                 &player_portal_graph,
                 post_player_id,
                 post_count,
             );
+            println!("After post wishing");
+            render_item_graph(item_portal_graph);
         }
         // Disconnect the player edge from end and connect it to the portal jumped into.
         let (player_origin, _, _) = player_portal_graph
@@ -182,13 +190,13 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
             Err("Created infinite loop")?;
         }
         // Add the edge linking prior and post players to the item portal graph
-        let item_counts = post_player.inventory.count_items();
+        dbg!(&post_player.inventory);
         for (item, item_portal_graph) in item_portal_graphs.iter_mut() {
             if let Some(origin_node) = find_latest_held(item_portal_graph, prior_player.id) {
                 item_portal_graph.add_edge(
                     origin_node,
                     ItemPortalGraphNode::Held(post_player_id, 0),
-                    item_counts[item],
+                    item_counts.get(item).copied().unwrap_or(0),
                 );
             }
         }
@@ -211,21 +219,6 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 let mut dfs = visit::Dfs::new(&filtered, origin_node);
                 let mut found_sink = false;
                 while let Some(node) = dfs.next(&filtered) {
-                    /*
-                    let incoming: usize = item_portal_graph
-                        .neighbors_directed(node, Incoming)
-                        .map(|node2| {
-                            item_portal_graph
-                                .edge_weight(node2, node)
-                                .expect("No edge from neighbor")
-                        })
-                        .sum();
-                    let outgoing = item_portal_graph.edges(node).map(|(_, _, w)| w).sum();
-                    if incoming > outgoing {
-                        found_sink = true;
-                        break;
-                    }
-                    */
                     if filtered.neighbors(node).next().is_none() {
                         found_sink = true;
                         break;
