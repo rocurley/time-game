@@ -19,7 +19,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
     let mut item_portal_graphs = initial_frame.item_portal_graphs.clone();
     let mut items = initial_frame.items.clone();
     let mut players = DoubleMap::new();
-    let mut inventories_to_merge: Vec<(Id<Player>, Id<Player>, &Inventory)> = Vec::new();
+    let mut jumpers: Vec<&Player> = Vec::new();
     for (_, old_player) in initial_frame.players.iter() {
         match plan.moves.get(&old_player.id) {
             None => {
@@ -37,51 +37,10 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 players.insert(player)?;
             }
             Some(&Move::Jump) => {
-                let portal = portals
-                    .remove_by_position(&old_player.position)
-                    .ok_or("Tried to close loop at wrong position")?;
-                let (player_origin, _, _) = player_portal_graph
-                    .all_edges()
-                    .find(|(_, _, &edge)| edge == old_player.id)
-                    .expect("Couldn't find player in portal graph");
-                player_portal_graph
-                    .remove_edge(player_origin, PlayerPortalGraphNode::End)
-                    .expect("Tried to close portal when edge unconnected to End");
-                player_portal_graph.add_edge(
-                    player_origin,
-                    PlayerPortalGraphNode::Portal(portal.id),
-                    old_player.id,
-                );
-                let new_player_id = match player_portal_graph
-                    .edges(PlayerPortalGraphNode::Portal(portal.id))
-                    .collect::<Vec<_>>()
-                    .as_slice()
-                {
-                    [(_, _, &new_player_id)] => new_player_id,
-                    slice => panic!(
-                        "New node didn't have exactly one outgoing edge: {:?}",
-                        slice
-                    ),
-                };
-                if !petgraph::algo::has_path_connecting(
-                    &player_portal_graph,
-                    PlayerPortalGraphNode::Portal(portal.id),
-                    PlayerPortalGraphNode::End,
-                    None,
-                ) {
-                    Err("Created infinite loop")?;
-                }
-                let item_counts = old_player.inventory.count_items();
-                for (item, item_portal_graph) in item_portal_graphs.iter_mut() {
-                    if let Some(origin_node) = find_latest_held(item_portal_graph, old_player.id) {
-                        item_portal_graph.add_edge(
-                            origin_node,
-                            ItemPortalGraphNode::Held(new_player_id, 0),
-                            item_counts[item],
-                        );
-                    }
-                }
-                inventories_to_merge.push((new_player_id, old_player.id, &old_player.inventory));
+                // We can't do everything right now, because we need to wait for all the players to
+                // exist in the new game frame. To make thing simple, we'll wait to do anything at
+                // all.
+                jumpers.push(old_player);
             }
             Some(&Move::PickUp) => {
                 let mut player: Player = old_player.clone();
@@ -148,17 +107,62 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
             player_id,
         );
     }
-    for (player_id, old_player_id, old_inventory) in inventories_to_merge {
-        let mut player = players
-            .get_mut_by_id(player_id)
-            .expect("Couldn't get player by id");
-        let inventory = match player.inventory {
+    for prior_player in jumpers {
+        let portal = portals
+            .remove_by_position(&prior_player.position)
+            .ok_or("Tried to close loop at wrong position")?;
+        // Disconnect the player edge from end and connect it to the portal jumped into.
+        let (player_origin, _, _) = player_portal_graph
+            .all_edges()
+            .find(|(_, _, &edge)| edge == prior_player.id)
+            .expect("Couldn't find player in portal graph");
+        player_portal_graph
+            .remove_edge(player_origin, PlayerPortalGraphNode::End)
+            .expect("Tried to close portal when edge unconnected to End");
+        player_portal_graph.add_edge(
+            player_origin,
+            PlayerPortalGraphNode::Portal(portal.id),
+            prior_player.id,
+        );
+        let post_player_id = match player_portal_graph
+            .edges(PlayerPortalGraphNode::Portal(portal.id))
+            .collect::<Vec<_>>()
+            .as_slice()
+        {
+            [(_, _, &new_player_id)] => new_player_id,
+            slice => panic!(
+                "New node didn't have exactly one outgoing edge: {:?}",
+                slice
+            ),
+        };
+        if !petgraph::algo::has_path_connecting(
+            &player_portal_graph,
+            PlayerPortalGraphNode::Portal(portal.id),
+            PlayerPortalGraphNode::End,
+            None,
+        ) {
+            Err("Created infinite loop")?;
+        }
+        let item_counts = prior_player.inventory.count_items();
+        for (item, item_portal_graph) in item_portal_graphs.iter_mut() {
+            if let Some(origin_node) = find_latest_held(item_portal_graph, prior_player.id) {
+                item_portal_graph.add_edge(
+                    origin_node,
+                    ItemPortalGraphNode::Held(post_player_id, 0),
+                    item_counts[item],
+                );
+            }
+        }
+        let mut post_player = players
+            .get_mut_by_id(post_player_id)
+            .expect("Couldn't get post_player by id");
+        let inventory = match post_player.inventory {
             Inventory::Actual(_) => panic!("Merged into an actual inventory"),
             Inventory::Hypothetical(ref inventory) => inventory,
         };
         // Merge the inventories
-        let (new_inventory, wishes) = inventory.merge_in(old_inventory.clone())?;
-        (*player).inventory = new_inventory;
+        let (new_inventory, wishes) = inventory.merge_in(prior_player.inventory.clone())?;
+        (*post_player).inventory = new_inventory;
         dbg!(&wishes);
         render_player_graph(&player_portal_graph);
         // Propegate the merge-implied wishes to the item graph
@@ -166,17 +170,16 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
             let item_portal_graph = item_portal_graphs
                 .get_mut(&item)
                 .expect("no item portal graph for existant item");
-            // Wait, which one is wishing? Is it both?
             signed_wish(
                 item_portal_graph,
                 &player_portal_graph,
-                old_player_id,
+                prior_player.id,
                 prior_count,
             );
             signed_wish(
                 item_portal_graph,
                 &player_portal_graph,
-                player_id,
+                post_player_id,
                 post_count - prior_count,
             );
         }
@@ -193,7 +196,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
         // sink, we're good to go.
 
         for (item, item_portal_graph) in item_portal_graphs.iter_mut() {
-            if let Some(origin_node) = find_latest_held(item_portal_graph, old_player_id) {
+            if let Some(origin_node) = find_latest_held(item_portal_graph, prior_player.id) {
                 let filtered =
                     visit::EdgeFiltered::from_fn(&*item_portal_graph, |(_, _, &w)| w != 0);
                 let mut dfs = visit::Dfs::new(&filtered, origin_node);
