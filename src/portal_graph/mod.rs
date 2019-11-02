@@ -1,5 +1,9 @@
+use petgraph::dot::Dot;
 use petgraph::graphmap::DiGraphMap;
 use petgraph::Direction::Incoming;
+use petgraph::Graph;
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use types::{Id, ItemDrop, Player, Portal};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -19,6 +23,33 @@ pub enum ItemPortalGraphNode {
 
 pub type PlayerPortalGraph = DiGraphMap<PlayerPortalGraphNode, Id<Player>>;
 pub type ItemPortalGraph = DiGraphMap<ItemPortalGraphNode, usize>;
+
+pub fn render_item_graph(graph: &ItemPortalGraph) {
+    let graph_graph: Graph<_, _, _> = graph.clone().into_graph();
+    let mut player_names = HashMap::<Id<Player>, char>::new();
+    let mut next_player = 'A';
+    let simpler_graph = graph_graph.map(
+        |_, node| match node {
+            ItemPortalGraphNode::Beginning => "Beginning".into(),
+            ItemPortalGraphNode::Dropped(_) => "Dropped".into(),
+            ItemPortalGraphNode::Portal(_) => "Portal".into(),
+            ItemPortalGraphNode::Held(id, count) => {
+                let player_name = player_names.entry(*id).or_insert_with(|| {
+                    let name = next_player;
+                    next_player = std::char::from_u32(next_player as u32 + 1).unwrap();
+                    name
+                });
+                format!("{}:{}", player_name, count)
+            }
+        },
+        |_, e| e,
+    );
+    println!("{:?}", Dot::with_config(&simpler_graph, &[]));
+}
+
+pub fn render_player_graph(graph: &PlayerPortalGraph) {
+    println!("{:?}", Dot::with_config(graph, &[]));
+}
 
 pub fn find_trail_from_origin(
     graph: &PlayerPortalGraph,
@@ -79,6 +110,19 @@ fn player_held_nodes(
     Some(held_nodes)
 }
 
+pub fn signed_wish(
+    graph: &mut ItemPortalGraph,
+    player_graph: &PlayerPortalGraph,
+    id: Id<Player>,
+    count: i32,
+) {
+    match count.cmp(&0) {
+        Ordering::Less => unwish(graph, player_graph, id, (-count) as usize),
+        Ordering::Equal => {}
+        Ordering::Greater => wish(graph, player_graph, id, count as usize),
+    }
+}
+
 pub fn wish(
     graph: &mut ItemPortalGraph,
     player_graph: &PlayerPortalGraph,
@@ -86,8 +130,8 @@ pub fn wish(
     count: usize,
 ) {
     println!("portal_graph::wish");
-    let held_nodes =
-        player_held_nodes(graph, player_graph, id).expect("Couldn't find player in portal graph");
+    let held_nodes = player_held_nodes(graph, player_graph, dbg!(id))
+        .expect("Couldn't find player in portal graph");
     if let Some((mut last_node, tail)) = held_nodes.split_first() {
         for node in tail {
             match graph.edge_weight_mut(*last_node, *node) {

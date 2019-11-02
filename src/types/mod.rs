@@ -448,9 +448,8 @@ impl HypotheticalInventory {
         count_cells_items(&self.cells)
     }
 
-    //TODO: We need to be able to update the item graph when you merge inventories, since this
-    //involves wishing and unwishing.
-    pub fn merge_in(&self, other: Inventory) -> Result<Inventory, String> {
+    pub fn merge_in(&self, other: Inventory) -> Result<(Inventory, Vec<(Item, i32, i32)>), String> {
+        let mut changes = Vec::<(Item, i32, i32)>::new();
         match other {
             Inventory::Actual(actual_other) => {
                 let mut constraints: HashMap<Item, isize> = self
@@ -469,6 +468,7 @@ impl HypotheticalInventory {
                             if let Err(extra) = add_to_cells(&mut cells, item, (-count) as usize) {
                                 panic!("Too many {:?}: can't find space for {:?}", item, extra);
                             }
+                            changes.push((item.clone(), -(count as i32), 0));
                         }
                         Ordering::Equal => {}
                         Ordering::Greater => {
@@ -487,10 +487,11 @@ impl HypotheticalInventory {
                                     item, short
                                 );
                             }
+                            changes.push((item.clone(), count as i32, 0));
                         }
                     }
                 }
-                Ok(Inventory::Actual(ActualInventory { cells }))
+                Ok((Inventory::Actual(ActualInventory { cells }), changes))
             }
             Inventory::Hypothetical(hypothetical_other) => {
                 //This can't actually fail. We basically want to adjust the other inventory
@@ -509,7 +510,6 @@ impl HypotheticalInventory {
                 //After this, what's left of extras will be what the self inventory needs to
                 //wish for.
                 for (item, &mut needed) in self_constraints.iter_mut() {
-                    use std::collections::hash_map::Entry;
                     if let Entry::Occupied(mut extra) = extras.entry(item.clone()) {
                         match needed.cmp(extra.get()) {
                             Ordering::Less => {
@@ -526,6 +526,7 @@ impl HypotheticalInventory {
                                 *other_constraint += needed - other_count;
                                 let other_minimum = other_minima.entry(item.clone()).or_insert(0);
                                 *other_minimum += needed - other_count;
+                                changes.push((item.clone(), 0, (needed - other_count) as i32));
                             }
                         }
                     }
@@ -535,8 +536,9 @@ impl HypotheticalInventory {
                     add_to_cells(&mut cells, &item, extra).map_err(|overflow| {
                         format!("Too many {:?} : can't find space for {}", item, overflow)
                     })?;
-                    let minimum = minima.entry(item).or_insert(0);
+                    let minimum = minima.entry(item.clone()).or_insert(0);
                     *minimum += extra;
+                    changes.push((item, extra as i32, 0));
                 }
                 //AFIACT this can't be done in place, which is a bit distressing.
                 let merged_minima = minima
@@ -546,11 +548,14 @@ impl HypotheticalInventory {
                         Some((item, std::cmp::min(minimum, *other_minimum)))
                     })
                     .collect();
-                Ok(Inventory::Hypothetical(HypotheticalInventory {
-                    cells,
-                    minima: merged_minima,
-                    constraints: other_constraints,
-                }))
+                Ok((
+                    Inventory::Hypothetical(HypotheticalInventory {
+                        cells,
+                        minima: merged_minima,
+                        constraints: other_constraints,
+                    }),
+                    changes,
+                ))
             }
         }
     }
@@ -833,7 +838,7 @@ mod tests {
         fn test_merge_in_empty_hypothetical(actual in any::<ActualInventory>()) {
             let hypothetical = HypotheticalInventory::new();
             let initial_counts = actual.count_items();
-            let merged = hypothetical.merge_in(Inventory::Actual(actual)).expect("Merge failed");
+            let (merged, _ )= hypothetical.merge_in(Inventory::Actual(actual)).expect("Merge failed");
             let merged_counts = merged.count_items();
             assert_eq!(initial_counts, merged_counts);
         }
@@ -848,7 +853,7 @@ mod tests {
                 hypothetical.wish(item.clone(), 0).expect("Wishing failed");
             }
             let initial_counts = actual.count_items();
-            let merged = hypothetical.merge_in(Inventory::Actual(actual)).expect("Merge failed");
+            let (merged, _) = hypothetical.merge_in(Inventory::Actual(actual)).expect("Merge failed");
             let merged_counts = merged.count_items();
             assert_eq!(initial_counts, merged_counts);
         }
@@ -900,7 +905,7 @@ mod tests {
                 } else {
                     HashMap::new()
                 };
-            let merged = hypothetical.merge_in(Inventory::Actual(actual)).expect("Merge failed");
+            let (merged, _) = hypothetical.merge_in(Inventory::Actual(actual)).expect("Merge failed");
             let merged_counts = merged.count_items();
             assert_eq!(expected_counts, merged_counts);
         }

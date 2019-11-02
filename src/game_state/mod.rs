@@ -6,12 +6,12 @@ use std::f32::consts::PI;
 
 use ggez::nalgebra;
 use ggez::nalgebra::{Similarity2, Vector2};
-use petgraph::dot::Dot;
 
 use game_frame::*;
 use types::*;
 
 use super::tree;
+use portal_graph::render_item_graph;
 use render::{draw_map_grid, inventory_bbox, pixel_space_to_tile_space, render_inventory};
 
 mod planning;
@@ -83,7 +83,8 @@ impl GameState {
                     let frame = self.history.get_focus_val_mut();
                     let selection = &mut self.selected;
                     if let Some(item_drop) = frame.items.get_by_position(&tile_pt) {
-                        frame.wish(player_id, ix, Some(item_drop.item.clone()));
+                        let wished_item = item_drop.item.clone();
+                        frame.wish(player_id, ix, Some(wished_item));
                         *selection = Selection::Inventory(player_id, Some(ix));
                     }
                     Ok(())
@@ -285,7 +286,7 @@ impl event::EventHandler for GameState {
                 Ok(new_frame) => {
                     for (item_type, item_portal_graph) in new_frame.item_portal_graphs.iter() {
                         println!("{:?}", item_type);
-                        println!("{:?}", Dot::with_config(&item_portal_graph, &[]));
+                        render_item_graph(&item_portal_graph);
                     }
                     match self.current_plan {
                         CachablePlan::Novel(ref mut plan) => {

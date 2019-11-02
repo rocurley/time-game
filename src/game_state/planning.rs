@@ -1,9 +1,12 @@
 use petgraph::graphmap::GraphMap;
+use petgraph::visit;
+use petgraph::visit::IntoNeighbors;
 
 use game_frame::GameFrame;
 use ggez::nalgebra;
 use portal_graph::{
-    find_latest_held, find_latest_held_index, ItemPortalGraphNode, PlayerPortalGraphNode,
+    find_latest_held, find_latest_held_index, render_item_graph, render_player_graph, signed_wish,
+    ItemPortalGraphNode, PlayerPortalGraphNode,
 };
 use types::{
     Direction, DoubleMap, GameError, HypotheticalInventory, Id, Inventory, ItemDrop, Move, Plan,
@@ -16,7 +19,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
     let mut item_portal_graphs = initial_frame.item_portal_graphs.clone();
     let mut items = initial_frame.items.clone();
     let mut players = DoubleMap::new();
-    let mut inventories_to_merge: Vec<(Id<Player>, &Inventory)> = Vec::new();
+    let mut inventories_to_merge: Vec<(Id<Player>, Id<Player>, &Inventory)> = Vec::new();
     for (_, old_player) in initial_frame.players.iter() {
         match plan.moves.get(&old_player.id) {
             None => {
@@ -78,7 +81,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                         );
                     }
                 }
-                inventories_to_merge.push((new_player_id, &old_player.inventory));
+                inventories_to_merge.push((new_player_id, old_player.id, &old_player.inventory));
             }
             Some(&Move::PickUp) => {
                 let mut player: Player = old_player.clone();
@@ -126,10 +129,8 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                     ItemPortalGraphNode::Dropped(item_drop_id),
                     1,
                 );
-                if remaining_item_count > 0 {
-                    let next_held = ItemPortalGraphNode::Held(player_id, latest_held_index + 1);
-                    item_portal_graph.add_edge(latest_held, next_held, remaining_item_count);
-                }
+                let next_held = ItemPortalGraphNode::Held(player_id, latest_held_index + 1);
+                item_portal_graph.add_edge(latest_held, next_held, remaining_item_count);
             }
         }
     }
@@ -147,15 +148,81 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
             player_id,
         );
     }
-    for (player_id, old_inventory) in inventories_to_merge {
+    for (player_id, old_player_id, old_inventory) in inventories_to_merge {
         let mut player = players
             .get_mut_by_id(player_id)
             .expect("Couldn't get player by id");
-        match player.inventory {
+        let inventory = match player.inventory {
             Inventory::Actual(_) => panic!("Merged into an actual inventory"),
-            Inventory::Hypothetical(ref inventory) => {
-                let new_inventory = inventory.merge_in(old_inventory.clone())?;
-                (*player).inventory = new_inventory;
+            Inventory::Hypothetical(ref inventory) => inventory,
+        };
+        // Merge the inventories
+        let (new_inventory, wishes) = inventory.merge_in(old_inventory.clone())?;
+        (*player).inventory = new_inventory;
+        dbg!(&wishes);
+        render_player_graph(&player_portal_graph);
+        // Propegate the merge-implied wishes to the item graph
+        for (item, prior_count, post_count) in wishes {
+            let item_portal_graph = item_portal_graphs
+                .get_mut(&item)
+                .expect("no item portal graph for existant item");
+            // Wait, which one is wishing? Is it both?
+            signed_wish(
+                item_portal_graph,
+                &player_portal_graph,
+                old_player_id,
+                prior_count,
+            );
+            signed_wish(
+                item_portal_graph,
+                &player_portal_graph,
+                player_id,
+                post_count - prior_count,
+            );
+        }
+        // Define a "source" as a node with items flowing out of it but none going in.
+        // This corresponds either to wishing or beginning. Similarly, define a sink as
+        // having items going in but not out. This corresponds to a drop, or a current
+        // hold.
+        //
+        // For an item graph to be valid, a source must connect to every node. This is
+        // the same as saying every node must connect to a sink. By completing a jump,
+        // we created an edge out of one node (origin_node) to another. The
+        // only way we could have invalidated a graph is if we made the jump node
+        // unable to reach a sink. This means that if we can connect the jump node to a
+        // sink, we're good to go.
+
+        for (item, item_portal_graph) in item_portal_graphs.iter_mut() {
+            if let Some(origin_node) = find_latest_held(item_portal_graph, old_player_id) {
+                let filtered =
+                    visit::EdgeFiltered::from_fn(&*item_portal_graph, |(_, _, &w)| w != 0);
+                let mut dfs = visit::Dfs::new(&filtered, origin_node);
+                let mut found_sink = false;
+                while let Some(node) = dfs.next(&filtered) {
+                    /*
+                    let incoming: usize = item_portal_graph
+                        .neighbors_directed(node, Incoming)
+                        .map(|node2| {
+                            item_portal_graph
+                                .edge_weight(node2, node)
+                                .expect("No edge from neighbor")
+                        })
+                        .sum();
+                    let outgoing = item_portal_graph.edges(node).map(|(_, _, w)| w).sum();
+                    if incoming > outgoing {
+                        found_sink = true;
+                        break;
+                    }
+                    */
+                    if filtered.neighbors(node).next().is_none() {
+                        found_sink = true;
+                        break;
+                    }
+                }
+                if !found_sink {
+                    render_item_graph(item_portal_graph);
+                    Err(format!("Created infinite loop for {:?}", item))?;
+                }
             }
         }
     }
