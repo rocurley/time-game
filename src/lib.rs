@@ -1,5 +1,4 @@
 #![feature(nll)]
-#![feature(copied)]
 #![allow(unknown_lints)]
 #![warn(clippy::all)]
 

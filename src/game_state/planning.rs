@@ -5,11 +5,11 @@ use petgraph::visit::IntoNeighbors;
 use game_frame::GameFrame;
 use ggez::nalgebra;
 use portal_graph::{
-    find_latest_held, find_latest_held_index, render_item_graph, render_player_graph, signed_wish,
-    ItemPortalGraphNode, PlayerPortalGraphNode,
+    find_latest_held, find_latest_held_index, render_item_graph, signed_wish, ItemPortalGraphNode,
+    PlayerPortalGraphNode,
 };
 use types::{
-    Direction, DoubleMap, GameError, HypotheticalInventory, Id, Inventory, ItemDrop, Move, Plan,
+    Direction, DoubleMap, GameError, HypotheticalInventory, Inventory, ItemDrop, Move, Plan,
     Player, Portal,
 };
 
@@ -142,11 +142,11 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
         // graphs. Conceptually, wishing and unwishing happens _before_ the portal closes, to make
         // it valid to close the portal.
         let mut item_counts = prior_player.inventory.count_items();
-        for (item, post_count, prior_count) in wishes {
-            let item_count = item_counts.entry(item.clone()).or_insert(0);
-            *item_count = (*item_count as i32 + prior_count) as usize;
+        for wish in wishes {
+            let item_count = item_counts.entry(wish.item.clone()).or_insert(0);
+            *item_count = (*item_count as i32 + wish.prior_count) as usize;
             let item_portal_graph = item_portal_graphs
-                .get_mut(&item)
+                .get_mut(&wish.item)
                 .expect("no item portal graph for existant item");
             println!("Before wishing");
             render_item_graph(item_portal_graph);
@@ -154,7 +154,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 item_portal_graph,
                 &player_portal_graph,
                 prior_player.id,
-                prior_count,
+                wish.prior_count,
             );
             println!("After prior wishing");
             render_item_graph(item_portal_graph);
@@ -162,7 +162,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 item_portal_graph,
                 &player_portal_graph,
                 post_player_id,
-                post_count,
+                wish.post_count,
             );
             println!("After post wishing");
             render_item_graph(item_portal_graph);

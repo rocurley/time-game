@@ -159,7 +159,6 @@ pub fn unwish(
             let existing_edge = graph
                 .edge_weight_mut(*last_node, *node)
                 .expect("unwished but edge was empty");
-            use std::cmp::Ordering;
             match (*existing_edge).cmp(&count) {
                 Ordering::Less => panic!("Unwished but edge was too small"),
                 Ordering::Equal => {

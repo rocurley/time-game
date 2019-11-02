@@ -448,8 +448,9 @@ impl HypotheticalInventory {
         count_cells_items(&self.cells)
     }
 
-    pub fn merge_in(&self, other: Inventory) -> Result<(Inventory, Vec<(Item, i32, i32)>), String> {
-        let mut changes = Vec::<(Item, i32, i32)>::new();
+    pub fn merge_in(&self, other: Inventory) -> Result<(Inventory, Vec<MergeWish>), String> {
+        // self = post, other = prior
+        let mut changes = Vec::<MergeWish>::new();
         match other {
             Inventory::Actual(actual_other) => {
                 let mut constraints: HashMap<Item, isize> = self
@@ -468,7 +469,11 @@ impl HypotheticalInventory {
                             if let Err(extra) = add_to_cells(&mut cells, item, (-count) as usize) {
                                 panic!("Too many {:?}: can't find space for {:?}", item, extra);
                             }
-                            changes.push((item.clone(), -(count as i32), 0));
+                            changes.push(MergeWish {
+                                item: item.clone(),
+                                post_count: -(count as i32),
+                                prior_count: 0,
+                            });
                         }
                         Ordering::Equal => {}
                         Ordering::Greater => {
@@ -487,7 +492,11 @@ impl HypotheticalInventory {
                                     item, short
                                 );
                             }
-                            changes.push((item.clone(), count as i32, 0));
+                            changes.push(MergeWish {
+                                item: item.clone(),
+                                post_count: (count as i32),
+                                prior_count: 0,
+                            });
                         }
                     }
                 }
@@ -526,7 +535,11 @@ impl HypotheticalInventory {
                                 *other_constraint += needed - other_count;
                                 let other_minimum = other_minima.entry(item.clone()).or_insert(0);
                                 *other_minimum += needed - other_count;
-                                changes.push((item.clone(), 0, (needed - other_count) as i32));
+                                changes.push(MergeWish {
+                                    item: item.clone(),
+                                    post_count: 0,
+                                    prior_count: (needed - other_count) as i32,
+                                });
                             }
                         }
                     }
@@ -538,7 +551,11 @@ impl HypotheticalInventory {
                     })?;
                     let minimum = minima.entry(item.clone()).or_insert(0);
                     *minimum += extra;
-                    changes.push((item, extra as i32, 0));
+                    changes.push(MergeWish {
+                        item: item.clone(),
+                        post_count: (extra as i32),
+                        prior_count: 0,
+                    });
                 }
                 //AFIACT this can't be done in place, which is a bit distressing.
                 let merged_minima = minima
@@ -559,6 +576,13 @@ impl HypotheticalInventory {
             }
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct MergeWish {
+    pub item: Item,
+    pub post_count: i32,
+    pub prior_count: i32,
 }
 
 #[derive(Clone, Debug, Default)]
