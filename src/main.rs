@@ -1,7 +1,7 @@
 extern crate time_game_lib;
 
 use time_game_lib::game_state::GameState;
-use time_game_lib::types::{Item, ItemDrop, Key, Player};
+use time_game_lib::types::{Item, ItemDrop, Key, Map, MapElement, Player};
 
 extern crate ggez;
 use ggez::*;
@@ -27,7 +27,9 @@ pub fn main() {
     }
 
     let ctx = &mut cb.build().unwrap();
-    let game_state = &mut GameState::new(ctx).unwrap();
+    let mut map = Map::new(10, 10);
+    map[(0, 0)] = MapElement::Wall;
+    let game_state = &mut GameState::new(ctx, map).unwrap();
     {
         let game_frame = game_state.history.get_focus_val_mut();
         game_frame

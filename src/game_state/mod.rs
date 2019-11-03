@@ -24,10 +24,10 @@ pub struct GameState {
 }
 
 impl GameState {
-    pub fn new(ctx: &mut ggez::Context) -> ggez::GameResult<Self> {
+    pub fn new(ctx: &mut ggez::Context, map: Map) -> ggez::GameResult<Self> {
         let image_map = ImageMap::new(ctx)?;
         Ok(GameState {
-            history: tree::Zipper::new(tree::RoseTree::singleton(GameFrame::new())),
+            history: tree::Zipper::new(tree::RoseTree::singleton(GameFrame::new(map))),
             selected: Selection::Top,
             current_plan: CachablePlan::new(),
             image_map,
@@ -314,10 +314,12 @@ impl event::EventHandler for GameState {
         let transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
         graphics::clear(ctx);
         graphics::set_background_color(ctx, graphics::Color::from_rgb(255, 255, 255));
+        let frame = self.history.get_focus_val();
+        frame.map.render(ctx, &self.image_map)?;
         graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
         draw_map_grid(ctx)?;
         graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
-        for (_, player) in self.history.get_focus_val().players.iter() {
+        for (_, player) in frame.players.iter() {
             self.image_map.player.draw(
                 ctx,
                 transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),

@@ -237,6 +237,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
         items,
         player_portal_graph,
         item_portal_graphs,
+        map: initial_frame.map.clone(),
     })
 }
 #[cfg(test)]

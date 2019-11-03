@@ -1,12 +1,14 @@
 use super::ggez::graphics;
 use super::ggez::nalgebra;
+use ggez::graphics::Drawable;
+use render::tile_space_to_pixel_space;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 pub const SCALE: f32 = 100.;
 pub const INVENTORY_WIDTH: usize = 8;
@@ -243,6 +245,7 @@ pub struct ImageMap {
     pub drop_icon: graphics::Image,
     pub portal: graphics::Image,
     pub key: graphics::Image,
+    pub wall: graphics::Image,
 }
 
 impl ImageMap {
@@ -255,6 +258,7 @@ impl ImageMap {
         let drop_icon = graphics::Image::new(ctx, "/images/drop.png")?;
         let portal = graphics::Image::new(ctx, "/images/portal.png")?;
         let key = graphics::Image::new(ctx, "/images/key.png")?;
+        let wall = graphics::Image::new(ctx, "/images/wall.png")?;
         Ok(ImageMap {
             player,
             selection,
@@ -264,6 +268,7 @@ impl ImageMap {
             drop_icon,
             portal,
             key,
+            wall,
         })
     }
 }
@@ -790,6 +795,75 @@ impl ItemDrop {
             item,
             position,
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MapElement {
+    Wall,
+    Empty,
+}
+impl MapElement {
+    pub fn image(self, image_map: &ImageMap) -> Option<&graphics::Image> {
+        match self {
+            MapElement::Empty => None,
+            MapElement::Wall => Some(&image_map.wall),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Map {
+    width: u16,
+    height: u16,
+    elements: Vec<MapElement>,
+}
+
+impl Map {
+    pub fn new(width: u16, height: u16) -> Self {
+        Map {
+            width,
+            height,
+            elements: vec![MapElement::Empty; (width * height) as usize],
+        }
+    }
+    pub fn render(&self, ctx: &mut ggez::Context, image_map: &ImageMap) -> ggez::GameResult<()> {
+        graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
+        let bounds = graphics::get_screen_coordinates(ctx);
+        for (i, element) in self.elements.iter().enumerate() {
+            let image = if let Some(img) = element.image(image_map) {
+                img
+            } else {
+                break;
+            };
+            let tile_space_pt =
+                Point::new(i as i32 % self.width as i32, i as i32 / self.height as i32);
+            let pixel_space_pt = tile_space_to_pixel_space(tile_space_pt, bounds);
+            image.draw(ctx, pixel_space_pt, 0.)?;
+        }
+        Ok(())
+    }
+}
+
+impl Index<(u16, u16)> for Map {
+    type Output = MapElement;
+
+    fn index(&self, xy: (u16, u16)) -> &Self::Output {
+        let (x, y) = xy;
+        assert!((0..self.width).contains(&x));
+        assert!((0..self.height).contains(&y));
+        let i = (x + y * self.width) as usize;
+        &self.elements[i]
+    }
+}
+
+impl IndexMut<(u16, u16)> for Map {
+    fn index_mut(&mut self, xy: (u16, u16)) -> &mut Self::Output {
+        let (x, y) = xy;
+        assert!((0..self.width).contains(&x));
+        assert!((0..self.height).contains(&y));
+        let i = (x + y * self.width) as usize;
+        &mut self.elements[i]
     }
 }
 

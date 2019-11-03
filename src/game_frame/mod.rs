@@ -5,7 +5,7 @@ use portal_graph::{
 };
 use std::collections::HashMap;
 use std::fmt;
-use types::{DoubleMap, GameError, Id, Inventory, Item, ItemDrop, Player, Portal};
+use types::{DoubleMap, GameError, Id, Inventory, Item, ItemDrop, Map, Player, Portal};
 
 #[derive(Clone)]
 pub struct GameFrame {
@@ -14,6 +14,7 @@ pub struct GameFrame {
     pub items: DoubleMap<ItemDrop>,
     pub player_portal_graph: PlayerPortalGraph,
     pub item_portal_graphs: HashMap<Item, ItemPortalGraph>,
+    pub map: Map,
 }
 impl fmt::Debug for GameFrame {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -27,18 +28,19 @@ impl fmt::Debug for GameFrame {
 
 impl Default for GameFrame {
     fn default() -> Self {
-        Self::new()
+        Self::new(Map::new(10, 10))
     }
 }
 
 impl GameFrame {
-    pub fn new() -> Self {
+    pub fn new(map: Map) -> Self {
         GameFrame {
             players: DoubleMap::new(),
             portals: DoubleMap::new(),
             items: DoubleMap::new(),
             player_portal_graph: GraphMap::new(),
             item_portal_graphs: HashMap::new(),
+            map,
         }
     }
     pub fn insert_item_drop(
