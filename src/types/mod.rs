@@ -800,14 +800,20 @@ impl ItemDrop {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MapElement {
-    Wall,
     Empty,
+    Wall,
 }
 impl MapElement {
     pub fn image(self, image_map: &ImageMap) -> Option<&graphics::Image> {
         match self {
             MapElement::Empty => None,
             MapElement::Wall => Some(&image_map.wall),
+        }
+    }
+    pub fn passable(self) -> bool {
+        match self {
+            MapElement::Empty => true,
+            MapElement::Wall => false,
         }
     }
 }
@@ -864,6 +870,20 @@ impl IndexMut<(u16, u16)> for Map {
         assert!((0..self.height).contains(&y));
         let i = (x + y * self.width) as usize;
         &mut self.elements[i]
+    }
+}
+
+impl Index<Point> for Map {
+    type Output = MapElement;
+
+    fn index(&self, pt: Point) -> &Self::Output {
+        self.index((pt.x as u16, pt.y as u16))
+    }
+}
+
+impl IndexMut<Point> for Map {
+    fn index_mut(&mut self, pt: Point) -> &mut Self::Output {
+        self.index_mut((pt.x as u16, pt.y as u16))
     }
 }
 

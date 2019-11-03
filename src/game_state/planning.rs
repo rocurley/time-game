@@ -34,6 +34,9 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                     Direction::Right => nalgebra::Vector2::x(),
                 };
                 player.position += delta;
+                if !initial_frame.map[player.position].passable() {
+                    Err("tried to move into somewhere impassible")?;
+                }
                 players.insert(player)?;
             }
             Some(&Move::Jump) => {
