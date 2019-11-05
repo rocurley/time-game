@@ -2,6 +2,7 @@ use super::ggez::graphics;
 use super::ggez::nalgebra;
 use ggez::graphics::Drawable;
 use render::tile_space_to_pixel_space;
+use slotmap::{HopSlotMap, SecondaryMap, SparseSecondaryMap};
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
@@ -246,6 +247,8 @@ pub struct ImageMap {
     pub portal: graphics::Image,
     pub key: graphics::Image,
     pub wall: graphics::Image,
+    pub open_door: graphics::Image,
+    pub closed_door: graphics::Image,
 }
 
 impl ImageMap {
@@ -259,6 +262,8 @@ impl ImageMap {
         let portal = graphics::Image::new(ctx, "/images/portal.png")?;
         let key = graphics::Image::new(ctx, "/images/key.png")?;
         let wall = graphics::Image::new(ctx, "/images/wall.png")?;
+        let open_door = graphics::Image::new(ctx, "/images/open_door.png")?;
+        let closed_door = graphics::Image::new(ctx, "/images/closed_door.png")?;
         Ok(ImageMap {
             player,
             selection,
@@ -269,6 +274,8 @@ impl ImageMap {
             portal,
             key,
             wall,
+            open_door,
+            closed_door,
         })
     }
 }
@@ -802,114 +809,99 @@ impl ItemDrop {
 pub enum MapElement {
     Empty,
     Wall,
+    ClosedDoor,
+    OpenDoor,
 }
 impl MapElement {
     pub fn image(self, image_map: &ImageMap) -> Option<&graphics::Image> {
         match self {
             MapElement::Empty => None,
             MapElement::Wall => Some(&image_map.wall),
+            MapElement::ClosedDoor => Some(&image_map.closed_door),
+            MapElement::OpenDoor => Some(&image_map.open_door),
         }
     }
     pub fn passable(self) -> bool {
         match self {
-            MapElement::Empty => true,
-            MapElement::Wall => false,
+            MapElement::Empty | MapElement::OpenDoor => true,
+            MapElement::Wall | MapElement::ClosedDoor => false,
         }
+    }
+    pub fn add(self, image_map: &ImageMap, pt: Point, ecs: &mut ECS) -> Entity {
+        let e = ecs.entities.insert(());
+        if let Some(image) = self.image(image_map) {
+            ecs.images.insert(e, image.clone());
+        }
+        ecs.positions.insert(e, pt);
+        if !self.passable() {
+            ecs.impassible.insert(e, ());
+        }
+        if self == MapElement::ClosedDoor {
+            let open = ecs.entities.insert(());
+            ecs.images.insert(open, image_map.open_door.clone());
+            ecs.locks.insert(
+                e,
+                LockComponent {
+                    unlocked_by: Item::Key(Key {}),
+                    when_unlocked: open,
+                },
+            );
+        }
+        e
     }
 }
 
-#[derive(Clone)]
-pub struct Map {
-    width: u16,
-    height: u16,
-    elements: Vec<MapElement>,
+// See https://kyren.github.io/2018/09/14/rustconf-talk.html
+// Fundamentally, we want to store a big set of structs. Each field of the struct is nullable, and
+// each field corresponds to a different "component" that may or may not be present in a given
+// "entity". This is pretty far from the standard ECS representation. To get there, we:
+// * Swap out the set with an array.
+// * Perform a array of structs to struct of arrays transform
+// * Re-use deleted slots using a generational index. Identify the entity with the generational
+// indices.
+// For our use case, many things are non-standard:
+// * Performance is much less of a concern. This game is in no way real-time: the game state can
+// only evolve at the speed of human input, and the number of entities is likely less than 100 at
+// any given time.
+// * We'll have one ECS per frame, not one for the game as a while. Since almost everything happens
+// local to a frame, it's more important to make single-frame manipulation easy than cross-frame
+// manipulation. This means we'll be copying the ECS as a whole a lot: from a performance
+// perspective, making that cheap may be important. Persistent collections could help here,
+// although those fall back to more standard collections at small sizes, which we may be under.
+// * The good news is that if we're yolo copying the ECS every frame, the IDs can persist without
+// issue. In particular, this means an ECS ID can refer to the "same" object in multiple frames, so
+// we can use the ECS IDs for references.
+new_key_type! { pub struct Entity; }
+pub type Components<T> = SecondaryMap<Entity, T>;
+pub type SparseComponents<T> = SparseSecondaryMap<Entity, T>;
+#[derive(Clone, Debug, Default)]
+pub struct ECS {
+    pub entities: HopSlotMap<Entity, ()>,
+    // a graphics::Image is just an ARC pointer, copying is cheap.
+    pub images: Components<graphics::Image>,
+    pub positions: Components<Point>,
+    pub locks: SparseComponents<LockComponent>,
+    pub impassible: Components<()>,
 }
 
-impl Map {
-    pub fn new(width: u16, height: u16) -> Self {
-        Map {
-            width,
-            height,
-            elements: vec![MapElement::Empty; (width * height) as usize],
-        }
-    }
-    pub fn render(&self, ctx: &mut ggez::Context, image_map: &ImageMap) -> ggez::GameResult<()> {
-        graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
-        let bounds = graphics::get_screen_coordinates(ctx);
-        for (i, element) in self.elements.iter().enumerate() {
-            let image = if let Some(img) = element.image(image_map) {
-                img
+pub fn entities_at(ecs: &ECS, pt: Point) -> Vec<Entity> {
+    ecs.positions
+        .iter()
+        .filter_map(|(e, &p)| {
+            if ecs.entities.contains_key(e) && p == pt {
+                Some(e)
             } else {
-                break;
-            };
-            let tile_space_pt =
-                Point::new(i as i32 % self.width as i32, i as i32 / self.height as i32);
-            let pixel_space_pt = tile_space_to_pixel_space(tile_space_pt, bounds);
-            image.draw(ctx, pixel_space_pt, 0.)?;
-        }
-        Ok(())
-    }
+                None
+            }
+        })
+        .collect()
 }
 
-impl Index<(u16, u16)> for Map {
-    type Output = MapElement;
-
-    fn index(&self, xy: (u16, u16)) -> &Self::Output {
-        let (x, y) = xy;
-        assert!((0..self.width).contains(&x));
-        assert!((0..self.height).contains(&y));
-        let i = (x + y * self.width) as usize;
-        &self.elements[i]
-    }
+#[derive(Clone, Debug)]
+pub struct LockComponent {
+    pub unlocked_by: Item,
+    pub when_unlocked: Entity,
 }
-
-impl IndexMut<(u16, u16)> for Map {
-    fn index_mut(&mut self, xy: (u16, u16)) -> &mut Self::Output {
-        let (x, y) = xy;
-        assert!((0..self.width).contains(&x));
-        assert!((0..self.height).contains(&y));
-        let i = (x + y * self.width) as usize;
-        &mut self.elements[i]
-    }
-}
-
-impl Index<Point> for Map {
-    type Output = MapElement;
-
-    fn index(&self, pt: Point) -> &Self::Output {
-        self.index((pt.x as u16, pt.y as u16))
-    }
-}
-
-impl IndexMut<Point> for Map {
-    fn index_mut(&mut self, pt: Point) -> &mut Self::Output {
-        self.index_mut((pt.x as u16, pt.y as u16))
-    }
-}
-
-// Inventory system
-//
-// We don't just want a flat pile of items: We want to be able to look them up quickly.
-//
-// We don't want a trait object (probably?) because we want to be able to recover the original
-// item. It's imaginable that we could have a trait that is good for everything (Maia say: have a
-// "use' method, which isn't at all out of the question given that it's a game).
-//
-// A huge struct (one per item type) seems clunky, but might work.
-//
-// Do your items have structure? If not, you could just have a map from an Item sum type to a
-// count. That's probably good enough for Minecraft's inventory system, for example.
-//
-// Hell, minecraft's system could be done with an array.
-//
-// I've been assuming that lookup is important, but what if it isn't? Maybe a Vec or array is the
-// way to go here. It does make consolidating items into stacks harder.
-//
-// What would an ECS do? Dumb entities with smart components. How do you select all the entities
-// with a given set of components?
-//
-// Hell, maybe "use()" is the way to go. Select something from your inventory, click on something
-// else. This calls use() with what you clicked as an argument?
 
 #[cfg(test)]
 mod tests {

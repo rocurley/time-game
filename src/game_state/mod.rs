@@ -12,6 +12,7 @@ use types::*;
 
 use super::tree;
 use portal_graph::render_item_graph;
+use render;
 use render::{draw_map_grid, inventory_bbox, pixel_space_to_tile_space, render_inventory};
 
 mod planning;
@@ -24,10 +25,10 @@ pub struct GameState {
 }
 
 impl GameState {
-    pub fn new(ctx: &mut ggez::Context, map: Map) -> ggez::GameResult<Self> {
+    pub fn new(ctx: &mut ggez::Context) -> ggez::GameResult<Self> {
         let image_map = ImageMap::new(ctx)?;
         Ok(GameState {
-            history: tree::Zipper::new(tree::RoseTree::singleton(GameFrame::new(map))),
+            history: tree::Zipper::new(tree::RoseTree::singleton(GameFrame::new())),
             selected: Selection::Top,
             current_plan: CachablePlan::new(),
             image_map,
@@ -315,7 +316,7 @@ impl event::EventHandler for GameState {
         graphics::clear(ctx);
         graphics::set_background_color(ctx, graphics::Color::from_rgb(255, 255, 255));
         let frame = self.history.get_focus_val();
-        frame.map.render(ctx, &self.image_map)?;
+        render::ecs(ctx, &frame.ecs)?;
         graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
         draw_map_grid(ctx)?;
         graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;

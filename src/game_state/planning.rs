@@ -8,9 +8,10 @@ use portal_graph::{
     find_latest_held, find_latest_held_index, render_item_graph, signed_wish, ItemPortalGraphNode,
     PlayerPortalGraphNode,
 };
+use std::cmp::min;
 use types::{
-    Direction, DoubleMap, GameError, HypotheticalInventory, Inventory, ItemDrop, Move, Plan,
-    Player, Portal,
+    entities_at, Direction, DoubleMap, Entity, GameError, HypotheticalInventory, Inventory,
+    ItemDrop, Move, Plan, Player, Portal,
 };
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, GameError> {
@@ -19,6 +20,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
     let mut item_portal_graphs = initial_frame.item_portal_graphs.clone();
     let mut items = initial_frame.items.clone();
     let mut players = DoubleMap::new();
+    let mut ecs = initial_frame.ecs.clone();
     let mut jumpers: Vec<&Player> = Vec::new();
     for (_, old_player) in initial_frame.players.iter() {
         match plan.moves.get(&old_player.id) {
@@ -34,8 +36,44 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                     Direction::Right => nalgebra::Vector2::x(),
                 };
                 player.position += delta;
-                if !initial_frame.map[player.position].passable() {
-                    Err("tried to move into somewhere impassible")?;
+                let mut to_unlock = Vec::<Entity>::new();
+                for (e, lock) in ecs.locks.iter() {
+                    if !ecs.entities.contains_key(e) {
+                        continue;
+                    }
+                    if ecs.positions.get(e) != Some(&player.position) {
+                        continue;
+                    }
+                    let unlocking_item_count = player
+                        .inventory
+                        .count_items()
+                        .get(&lock.unlocked_by)
+                        .copied()
+                        .unwrap_or(0);
+                    if unlocking_item_count == 0 {
+                        println!("Need a {:?}", &lock.unlocked_by);
+                        continue;
+                    }
+                    to_unlock.push(e);
+                    if let Inventory::Hypothetical(ref mut inventory) = player.inventory {
+                        let minimum = inventory
+                            .minima
+                            .entry(lock.unlocked_by.clone())
+                            .or_insert(0);
+                        *minimum = min(unlocking_item_count - 1, *minimum);
+                    }
+                }
+                for e in to_unlock {
+                    let lock = ecs.locks.remove(e).expect("Can't find lock to unlock");
+                    ecs.entities
+                        .remove(e)
+                        .expect("Can't find locked entity to remove");
+                    ecs.positions.insert(lock.when_unlocked, player.position);
+                }
+                for e in entities_at(&ecs, player.position) {
+                    if ecs.impassible.contains_key(e) {
+                        Err("tried to move into somewhere impassible")?;
+                    }
                 }
                 players.insert(player)?;
             }
@@ -240,7 +278,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
         items,
         player_portal_graph,
         item_portal_graphs,
-        map: initial_frame.map.clone(),
+        ecs,
     })
 }
 #[cfg(test)]

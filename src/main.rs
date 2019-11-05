@@ -1,7 +1,7 @@
 extern crate time_game_lib;
 
 use time_game_lib::game_state::GameState;
-use time_game_lib::types::{Item, ItemDrop, Key, Map, MapElement, Player};
+use time_game_lib::types::{Item, ItemDrop, Key, MapElement, Player};
 
 extern crate ggez;
 use ggez::*;
@@ -27,17 +27,23 @@ pub fn main() {
     }
 
     let ctx = &mut cb.build().unwrap();
-    let mut map = Map::new(10, 10);
-    map[(0, 0)] = MapElement::Wall;
-    let game_state = &mut GameState::new(ctx, map).unwrap();
-    {
-        let game_frame = game_state.history.get_focus_val_mut();
-        game_frame
-            .insert_player(Player::new(Point2::new(0, 4)))
-            .expect("Could not insert player");
-        game_frame
-            .insert_item_drop(ItemDrop::new(Item::Key(Key {}), Point2::new(3, 3)), 1)
-            .expect("Could not insert item");
-    }
+    let game_state = &mut GameState::new(ctx).unwrap();
+    let game_frame = game_state.history.get_focus_val_mut();
+    game_frame
+        .insert_player(Player::new(Point2::new(0, 4)))
+        .expect("Could not insert player");
+    game_frame
+        .insert_item_drop(ItemDrop::new(Item::Key(Key {}), Point2::new(3, 3)), 1)
+        .expect("Could not insert item");
+    MapElement::Wall.add(
+        &game_state.image_map,
+        Point2::new(0, 0),
+        &mut game_frame.ecs,
+    );
+    MapElement::ClosedDoor.add(
+        &game_state.image_map,
+        Point2::new(1, 0),
+        &mut game_frame.ecs,
+    );
     event::run(ctx, game_state).unwrap();
 }

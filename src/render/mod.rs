@@ -111,3 +111,20 @@ pub fn render_inventory(
     }
     Ok(())
 }
+
+pub fn ecs(ctx: &mut ggez::Context, ecs: &ECS) -> ggez::GameResult<()> {
+    graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
+    let bounds = graphics::get_screen_coordinates(ctx);
+    for (entity, image) in ecs.images.iter() {
+        if !ecs.entities.contains_key(entity) {
+            continue;
+        }
+        let pt = match ecs.positions.get(entity) {
+            Some(pt) => *pt,
+            None => continue,
+        };
+        let pixel_space_pt = tile_space_to_pixel_space(pt, bounds);
+        image.draw(ctx, pixel_space_pt, 0.)?;
+    }
+    Ok(())
+}
