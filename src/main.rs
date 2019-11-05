@@ -33,17 +33,35 @@ pub fn main() {
         .insert_player(Player::new(Point2::new(0, 4)))
         .expect("Could not insert player");
     game_frame
-        .insert_item_drop(ItemDrop::new(Item::Key(Key {}), Point2::new(3, 3)), 1)
+        .insert_item_drop(ItemDrop::new(Item::Key(Key {}), Point2::new(1, 1)), 1)
         .expect("Could not insert item");
-    MapElement::Wall.add(
-        &game_state.image_map,
-        Point2::new(0, 0),
-        &mut game_frame.ecs,
-    );
-    MapElement::ClosedDoor.add(
-        &game_state.image_map,
-        Point2::new(1, 0),
-        &mut game_frame.ecs,
-    );
+    let map = [
+        (
+            MapElement::Wall,
+            vec![
+                (0, 0),
+                (1, 0),
+                (2, 0),
+                (3, 0),
+                (0, 1),
+                (3, 1),
+                (0, 2),
+                (3, 2),
+                (0, 3),
+                (2, 3),
+                (3, 3),
+            ],
+        ),
+        (MapElement::ClosedDoor, vec![(1, 3)]),
+    ];
+    for (el, pts) in map.iter() {
+        for &(x, y) in pts {
+            el.add(
+                &game_state.image_map,
+                Point2::new(x, y),
+                &mut game_frame.ecs,
+            );
+        }
+    }
     event::run(ctx, game_state).unwrap();
 }
