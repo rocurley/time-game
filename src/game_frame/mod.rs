@@ -32,21 +32,6 @@ impl Default for GameFrame {
     }
 }
 
-// TODO:
-// Gonna implement non-static map stuff in an ECS fashion.
-// Maybe static map stuff too. Components to have:
-// position
-// type (probably use this for genuinely one-off behaviour).
-// image (ref, I think. Could just check the type, but would probably need to break it out as soon
-// as we wanted type to influence image.)
-// A tricky thing is that that ECS systems have this whole system of IDs (entities). This system
-// isn't really the same with ID<T>. In particular, different frames will have entities with the
-// same ID (and this is important), but at the ECS level those entities are distinct (and therefore
-// definitionally have different IDs. I think this isn't actually a problem, just something we need
-// to keep in mind.
-// Do we want one slotmap, or one per frame? I think one per frame makes the most sense: since
-// almost everything happens local to a frame, it's more important to make single-frame
-// manipulation easy than cross-frame manipulation.
 impl GameFrame {
     pub fn new() -> Self {
         GameFrame {

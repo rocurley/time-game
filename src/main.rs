@@ -35,6 +35,21 @@ pub fn main() {
     game_frame
         .insert_item_drop(ItemDrop::new(Item::Key(Key {}), Point2::new(1, 1)), 1)
         .expect("Could not insert item");
+    // TODO: Some possible puzzles:
+    // Key in a locked room (below)
+    // Multiple blocks required, only 1 block exists.
+    // Get something from the end of a hallway with death walls coming towards you, IE:
+    // ----------------------
+    // x    x    x    x    x
+    // ----------------------
+    // ...
+    // ----------------------
+    //  x    x    x    x    x
+    // ----------------------
+    // ...
+    // ----------------------
+    //   x    x    x    x
+    // ----------------------
     let map = [
         (
             MapElement::Wall,

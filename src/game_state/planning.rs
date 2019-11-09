@@ -166,6 +166,17 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 slice
             ),
         };
+        // TODO:There's a bug where this crashes if post_player themselves jumped, because they're
+        // not in players. There are 3 possibilities:
+        //
+        // * The post_player didn't jump: they're in players.
+        // * The post_player did jump, and they've already been processed (possibly many frames
+        // ago). In that case, we want to follow the player_portal_graph, and figure out what
+        // they're called now.
+        // * The post_player did jump, and they haven't been processed. In that case, they're
+        // somewhere in the rest of jumpers.
+        //
+        // By doing a topological sort, we could eliminate the last possibility.
         let mut post_player = players
             .get_mut_by_id(post_player_id)
             .expect("Couldn't get post_player by id");
