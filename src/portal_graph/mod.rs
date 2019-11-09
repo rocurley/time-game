@@ -21,6 +21,7 @@ pub enum ItemPortalGraphNode {
     Held(Id<Player>, usize), //Index. Lets you figure out the last node the player was at.
 }
 
+// TODO: I think we could replace this with a Vec<Vec<(PlayerPortalGraphNode, Id<Player>)>>
 pub type PlayerPortalGraph = DiGraphMap<PlayerPortalGraphNode, Id<Player>>;
 pub type ItemPortalGraph = DiGraphMap<ItemPortalGraphNode, usize>;
 

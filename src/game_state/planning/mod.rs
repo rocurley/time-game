@@ -11,6 +11,7 @@ use portal_graph::{
 };
 use std::cmp::min;
 use std::iter;
+use std::ops::DerefMut;
 use types::{
     entities_at, Direction, DoubleMap, Entity, GameError, HypotheticalInventory, Inventory,
     ItemDrop, Move, Plan, Player, Portal,
@@ -23,7 +24,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
     let mut items = initial_frame.items.clone();
     let mut players = DoubleMap::new();
     let mut ecs = initial_frame.ecs.clone();
-    let mut jumpers: Vec<&Player> = Vec::new();
+    let mut jumpers: Vec<Player> = Vec::new();
     for (_, old_player) in initial_frame.players.iter() {
         match plan.moves.get(&old_player.id) {
             None => {
@@ -83,7 +84,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 // We can't do everything right now, because we need to wait for all the players to
                 // exist in the new game frame. To make thing simple, we'll wait to do anything at
                 // all.
-                jumpers.push(old_player);
+                jumpers.push(old_player.clone());
             }
             Some(&Move::PickUp) => {
                 let mut player: Player = old_player.clone();
@@ -150,7 +151,7 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
             player_id,
         );
     }
-    for prior_player in jumpers {
+    while let Some(prior_player) = jumpers.pop() {
         // Note that prior_player has not been inserted into players, nor will it be.
         // First, we remove the portal.
         let portal = portals
@@ -168,20 +169,30 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
             },
         );
         let post_player_id = *last_edge.expect("No outgoing edges for closed portal");
-        // TODO:There's a bug where this crashes if post_player themselves jumped, because they're
-        // not in players. There are 3 possibilities:
-        //
+        if post_player_id == prior_player.id {
+            Err("Attempted to jump into self")?;
+        }
+        // There are 3 possibilities here:
         // * The post_player didn't jump: they're in players.
         // * The post_player did jump, and they've already been processed (possibly many frames
         // ago). In that case, we want to follow the player_portal_graph, and figure out what
-        // they're called now. DONE.
+        // they're called now.
         // * The post_player did jump, and they haven't been processed. In that case, they're
         // somewhere in the rest of jumpers.
         //
-        // By doing a topological sort, we could eliminate the last possibility.
-        let mut post_player = players
-            .get_mut_by_id(post_player_id)
-            .expect("Couldn't get post_player by id");
+        // We handle the first two cases together, and the last one by searching through jumpers.
+        let mut post_player_ref_wrapper = players.get_mut_by_id(post_player_id);
+        let post_player = post_player_ref_wrapper.as_mut().map_or_else(
+            || {
+                for post_player in jumpers.iter_mut() {
+                    if post_player.id == post_player_id {
+                        return post_player;
+                    }
+                }
+                panic!("Couldn't find post_player in players or jumpers");
+            },
+            |r| r.deref_mut(),
+        );
         // Merge the inventories
         let post_inventory = match post_player.inventory {
             Inventory::Actual(_) => panic!("Merged into an actual inventory"),
