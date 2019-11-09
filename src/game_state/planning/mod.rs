@@ -1,6 +1,7 @@
 use petgraph::graphmap::GraphMap;
 use petgraph::visit;
 use petgraph::visit::IntoNeighbors;
+use petgraph::visit::Walker;
 
 use game_frame::GameFrame;
 use ggez::nalgebra;
@@ -9,6 +10,7 @@ use portal_graph::{
     PlayerPortalGraphNode,
 };
 use std::cmp::min;
+use std::iter;
 use types::{
     entities_at, Direction, DoubleMap, Entity, GameError, HypotheticalInventory, Inventory,
     ItemDrop, Move, Plan, Player, Portal,
@@ -155,24 +157,24 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
             .remove_by_position(&prior_player.position)
             .ok_or("Tried to close loop at wrong position")?;
         // Next, we find the player we're merging into: "post_player"
-        let post_player_id = match player_portal_graph
-            .edges(PlayerPortalGraphNode::Portal(portal.id))
-            .collect::<Vec<_>>()
-            .as_slice()
-        {
-            [(_, _, &new_player_id)] => new_player_id,
-            slice => panic!(
-                "New node didn't have exactly one outgoing edge: {:?}",
-                slice
-            ),
-        };
+        let mut last_edge = None;
+        visit::depth_first_search(
+            &player_portal_graph,
+            iter::once(PlayerPortalGraphNode::Portal(portal.id)),
+            |e| {
+                if let visit::DfsEvent::TreeEdge(n1, n2) = e {
+                    last_edge = player_portal_graph.edge_weight(n1, n2);
+                }
+            },
+        );
+        let post_player_id = *last_edge.expect("No outgoing edges for closed portal");
         // TODO:There's a bug where this crashes if post_player themselves jumped, because they're
         // not in players. There are 3 possibilities:
         //
         // * The post_player didn't jump: they're in players.
         // * The post_player did jump, and they've already been processed (possibly many frames
         // ago). In that case, we want to follow the player_portal_graph, and figure out what
-        // they're called now.
+        // they're called now. DONE.
         // * The post_player did jump, and they haven't been processed. In that case, they're
         // somewhere in the rest of jumpers.
         //

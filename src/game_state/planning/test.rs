@@ -80,7 +80,6 @@ fn unfold_arbitrary_plans(depth: u32) -> BoxedStrategy<Vec<GameFrame>> {
 }
 
 proptest! {
-    #[allow(clippy::unnecessary_operation)] //Can't figure this one out
     #[test]
     fn test_apply_plan(ref game_frames in unfold_arbitrary_plans(10)) {
         for frame in game_frames.iter() {
@@ -101,4 +100,42 @@ fn test_loop() {
     let mut plan_1 = Plan::new();
     plan_1.moves.insert(player_id, Move::Jump);
     apply_plan(&game_frame_1, &plan_1).expect_err("Completed infinite loop");
+}
+#[test]
+fn test_two_jumps() {
+    let mut game_frame_0 = GameFrame::new();
+    let player_0 = Player::new(Point2::new(0, 0));
+    let player_0_id = player_0.id;
+    game_frame_0
+        .insert_player(player_0)
+        .expect("Error insterting player");
+    let mut plan_0 = Plan::new();
+    plan_0.portals.insert(Point2::new(1, 0));
+    plan_0.portals.insert(Point2::new(2, 0));
+    let game_frame_1 = apply_plan(&game_frame_0, &plan_0).expect("Couldn't create portals");
+    let player_1_id = game_frame_1
+        .players
+        .id_by_position(&Point2::new(1, 0))
+        .expect("Couldn't find a player at (1,0)");
+    let player_2_id = game_frame_1
+        .players
+        .id_by_position(&Point2::new(2, 0))
+        .expect("Couldn't find a player at (1,0)");
+    let mut plan_1 = Plan::new();
+    plan_1
+        .moves
+        .insert(player_0_id, Move::Direction(Direction::Right));
+    plan_1
+        .moves
+        .insert(player_1_id, Move::Direction(Direction::Right));
+    plan_1
+        .moves
+        .insert(player_2_id, Move::Direction(Direction::Right));
+    let game_frame_2 = apply_plan(&game_frame_1, &plan_1).expect("Couldn't move right.");
+    let mut plan_2 = Plan::new();
+    plan_2.moves.insert(player_1_id, Move::Jump);
+    let game_frame_3 = apply_plan(&game_frame_2, &plan_2).expect("Couldn't perform first jump.");
+    let mut plan_3 = Plan::new();
+    plan_3.moves.insert(player_0_id, Move::Jump);
+    apply_plan(&game_frame_3, &plan_3).expect("Couldn't perform second jump.");
 }
