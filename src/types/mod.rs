@@ -884,6 +884,34 @@ pub struct ECS {
     pub impassible: Components<()>,
 }
 
+// TODO: consider type-level shenanigans to prevent composing an Action that requires an input the
+// EventTrigger can't provide.
+pub enum EventTrigger {
+    PlayerIntersect,
+    PlayerIntersectHasItems(Item, usize),
+    ItemIntersect,
+    CounterPredicate(Counter, Box<dyn Fn(i64) -> bool>),
+}
+
+pub enum Counter {
+    Unlock,
+}
+
+pub enum Action {
+    BecomeEntity(Entity),
+    AlterCounter(Entity, Counter, Box<dyn Fn(i64) -> i64>),
+    // Implicitly uses intersecting player; should maybe take an argument for how to find the player.
+    PlayerMarkUsed(Item, usize),
+    Reject(&'static str),
+    All(Vec<Action>),
+}
+
+pub struct EventListener {
+    trigger: EventTrigger,
+    action: Action,
+    // TODO: Add priority to allow proper phasing
+}
+
 pub fn entities_at(ecs: &ECS, pt: Point) -> Vec<Entity> {
     ecs.positions
         .iter()
