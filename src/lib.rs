@@ -10,6 +10,11 @@ extern crate petgraph;
 extern crate rand;
 #[macro_use]
 extern crate slotmap;
+#[macro_use]
+extern crate derivative;
+extern crate objekt;
+#[macro_use]
+extern crate enum_map;
 
 mod game_frame;
 pub mod game_state;

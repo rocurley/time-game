@@ -1,7 +1,6 @@
 use super::ggez::graphics;
 use super::ggez::nalgebra;
-use ggez::graphics::Drawable;
-use render::tile_space_to_pixel_space;
+use enum_map::EnumMap;
 use slotmap::{HopSlotMap, SecondaryMap, SparseSecondaryMap};
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -9,7 +8,7 @@ use std::collections::hash_map::Entry;
 use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut, Index, IndexMut};
+use std::ops::{Deref, DerefMut};
 
 pub const SCALE: f32 = 100.;
 pub const INVENTORY_WIDTH: usize = 8;
@@ -882,33 +881,51 @@ pub struct ECS {
     pub positions: Components<Point>,
     pub locks: SparseComponents<LockComponent>,
     pub impassible: Components<()>,
+    pub event_listeners: Components<EventListener>,
+    pub counters: Components<EnumMap<Counter, i64>>,
 }
+
+pub trait CloneFn<A, B>: objekt::Clone + Fn(A) -> B {}
+objekt::clone_trait_object!(<A,B>CloneFn<A,B>);
 
 // TODO: consider type-level shenanigans to prevent composing an Action that requires an input the
 // EventTrigger can't provide.
+#[derive(Clone, Derivative)]
+#[derivative(Debug)]
 pub enum EventTrigger {
     PlayerIntersect,
     PlayerIntersectHasItems(Item, usize),
-    ItemIntersect,
-    CounterPredicate(Counter, Box<dyn Fn(i64) -> bool>),
+    ItemIntersect(Item),
+    CounterPredicate(
+        Counter,
+        #[derivative(Debug = "ignore")] Box<dyn CloneFn<i64, bool>>,
+    ),
 }
 
+#[derive(Copy, Clone, Debug, Enum)]
 pub enum Counter {
     Unlock,
 }
 
+#[derive(Clone, Derivative)]
+#[derivative(Debug)]
 pub enum Action {
     BecomeEntity(Entity),
-    AlterCounter(Entity, Counter, Box<dyn Fn(i64) -> i64>),
+    AlterCounter(
+        Entity,
+        Counter,
+        #[derivative(Debug = "ignore")] Box<dyn CloneFn<i64, i64>>,
+    ),
     // Implicitly uses intersecting player; should maybe take an argument for how to find the player.
     PlayerMarkUsed(Item, usize),
     Reject(&'static str),
     All(Vec<Action>),
 }
 
+#[derive(Clone, Debug)]
 pub struct EventListener {
-    trigger: EventTrigger,
-    action: Action,
+    pub trigger: EventTrigger,
+    pub action: Action,
     // TODO: Add priority to allow proper phasing
 }
 
