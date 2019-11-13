@@ -1,6 +1,6 @@
 #![feature(nll)]
-#![allow(unknown_lints)]
 #![warn(clippy::all)]
+#![allow(clippy::try_err)]
 
 #[cfg(test)]
 #[macro_use]

@@ -832,19 +832,26 @@ impl MapElement {
             ecs.images.insert(e, image.clone());
         }
         ecs.positions.insert(e, pt);
-        if !self.passable() {
-            ecs.impassible.insert(e, ());
-        }
+        let mut event_listeners = Vec::new();
         if self == MapElement::ClosedDoor {
             let open = ecs.entities.insert(());
             ecs.images.insert(open, image_map.open_door.clone());
-            ecs.locks.insert(
-                e,
-                LockComponent {
-                    unlocked_by: Item::Key(Key {}),
-                    when_unlocked: open,
-                },
-            );
+            event_listeners.push(EventListener {
+                trigger: EventTrigger::PlayerIntersectHasItems(Item::Key(Key {}), 1),
+                action: Action::All(vec![
+                    Action::PlayerMarkUsed(Item::Key(Key {}), 1),
+                    Action::BecomeEntity(open),
+                ]),
+            });
+        }
+        if !self.passable() {
+            event_listeners.push(EventListener {
+                trigger: EventTrigger::PlayerIntersect,
+                action: Action::Reject("impassible"),
+            });
+        }
+        if !event_listeners.is_empty() {
+            ecs.event_listeners.insert(e, event_listeners);
         }
         e
     }
@@ -879,9 +886,7 @@ pub struct ECS {
     // a graphics::Image is just an ARC pointer, copying is cheap.
     pub images: Components<graphics::Image>,
     pub positions: Components<Point>,
-    pub locks: SparseComponents<LockComponent>,
-    pub impassible: Components<()>,
-    pub event_listeners: Components<EventListener>,
+    pub event_listeners: Components<Vec<EventListener>>,
     pub counters: Components<EnumMap<Counter, i64>>,
 }
 

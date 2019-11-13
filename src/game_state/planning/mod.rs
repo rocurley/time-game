@@ -1,7 +1,6 @@
 use petgraph::graphmap::GraphMap;
 use petgraph::visit;
 use petgraph::visit::IntoNeighbors;
-use petgraph::visit::Walker;
 
 use enum_map::EnumMap;
 use game_frame::GameFrame;
@@ -41,45 +40,6 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 };
                 player.position += delta;
 
-                let mut to_unlock = Vec::<Entity>::new();
-                for (e, lock) in ecs.locks.iter() {
-                    if !ecs.entities.contains_key(e) {
-                        continue;
-                    }
-                    if ecs.positions.get(e) != Some(&player.position) {
-                        continue;
-                    }
-                    let unlocking_item_count = player
-                        .inventory
-                        .count_items()
-                        .get(&lock.unlocked_by)
-                        .copied()
-                        .unwrap_or(0);
-                    if unlocking_item_count == 0 {
-                        println!("Need a {:?}", &lock.unlocked_by);
-                        continue;
-                    }
-                    to_unlock.push(e);
-                    if let Inventory::Hypothetical(ref mut inventory) = player.inventory {
-                        let minimum = inventory
-                            .minima
-                            .entry(lock.unlocked_by.clone())
-                            .or_insert(0);
-                        *minimum = min(unlocking_item_count - 1, *minimum);
-                    }
-                }
-                for e in to_unlock {
-                    let lock = ecs.locks.remove(e).expect("Can't find lock to unlock");
-                    ecs.entities
-                        .remove(e)
-                        .expect("Can't find locked entity to remove");
-                    ecs.positions.insert(lock.when_unlocked, player.position);
-                }
-                for e in entities_at(&ecs, player.position) {
-                    if ecs.impassible.contains_key(e) {
-                        Err("tried to move into somewhere impassible")?;
-                    }
-                }
                 players.insert(player)?;
             }
             Some(&Move::Jump) => {
@@ -154,81 +114,91 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
         );
     }
 
-    for (entity, event_listener) in ecs.event_listeners.iter() {
-        let triggered = match &event_listener.trigger {
-            EventTrigger::PlayerIntersect => ecs
-                .positions
-                .get(entity)
-                .and_then(|pos| players.get_by_position(pos))
-                .is_some(),
-            EventTrigger::PlayerIntersectHasItems(item, required_count) => ecs
-                .positions
-                .get(entity)
-                .and_then(|pos| players.get_by_position(pos))
-                .and_then(|player| player.inventory.count_items().get(&item).copied())
-                .filter(|c| c >= required_count)
-                .is_some(),
-            EventTrigger::ItemIntersect(item) => ecs
-                .positions
-                .get(entity)
-                .and_then(|pos| items.get_by_position(pos))
-                .filter(|drop| drop.item == *item)
-                .is_some(),
-            EventTrigger::CounterPredicate(counter, p) => {
-                let count = ecs
-                    .counters
-                    .get(entity)
-                    .map_or(0, |counters| counters[*counter]);
-                p(count)
-            }
-        };
-        if !triggered {
-            continue;
-        }
-        match &event_listener.action {
-            Action::BecomeEntity(target) => {
-                let position = ecs
+    for (entity, event_listeners) in ecs.event_listeners.iter() {
+        'entity_listeners: for event_listener in event_listeners {
+            let triggered = match &event_listener.trigger {
+                EventTrigger::PlayerIntersect => ecs
                     .positions
-                    .remove(entity)
-                    .expect("Can't find positions for entity to remove swap");
-                ecs.positions.insert(*target, position);
-            }
-            Action::AlterCounter(target, counter, f) => {
-                if !ecs.counters.contains_key(*target) {
-                    ecs.counters.insert(*target, EnumMap::new());
-                }
-                let counters = ecs
-                    .counters
-                    .get_mut(*target)
-                    .expect("Should have ensured that the counters existed");
-                counters[*counter] = f(counters[*counter]);
-            }
-            Action::PlayerMarkUsed(item, count) => {
-                ecs.positions
                     .get(entity)
                     .and_then(|pos| players.get_by_position(pos))
-                    .map(|player| player.id) // Return the borrow...
-                    .map(|player_id| {
-                        // ... and take it back mutably.
-                        let mut player = players
-                            .get_mut_by_id(player_id)
-                            .expect("Failed to re-borrow player");
-                        let item_count = player
-                            .inventory
-                            .count_items()
-                            .get(item)
-                            .copied()
-                            .unwrap_or(0);
-                        if item_count < *count {
-                            panic!("Not enough items for PlayerMarkUsed")
-                        }
-                        if let Inventory::Hypothetical(ref mut inventory) = player.inventory {
-                            let minimum = inventory.minima.entry(item.clone()).or_insert(0);
-                            *minimum = min(count - 1, *minimum);
-                        }
-                    });
+                    .is_some(),
+                EventTrigger::PlayerIntersectHasItems(item, required_count) => ecs
+                    .positions
+                    .get(entity)
+                    .and_then(|pos| players.get_by_position(pos))
+                    .and_then(|player| player.inventory.count_items().get(&item).copied())
+                    .filter(|c| c >= required_count)
+                    .is_some(),
+                EventTrigger::ItemIntersect(item) => ecs
+                    .positions
+                    .get(entity)
+                    .and_then(|pos| items.get_by_position(pos))
+                    .filter(|drop| drop.item == *item)
+                    .is_some(),
+                EventTrigger::CounterPredicate(counter, p) => {
+                    let count = ecs
+                        .counters
+                        .get(entity)
+                        .map_or(0, |counters| counters[*counter]);
+                    p(count)
+                }
+            };
+            if !triggered {
+                continue;
             }
-            Action::Reject(msg) => Err(*msg)?,
+            // We avoid explicit recursion to avoid the borrow checker thinking we might mutate
+            // ecs.event_listeners
+            let mut actions = vec![&event_listener.action];
+            while let Some(action) = actions.pop() {
+                match action {
+                    Action::BecomeEntity(target) => {
+                        let position = ecs
+                            .positions
+                            .remove(entity)
+                            .expect("Can't find positions for entity to remove swap");
+                        ecs.positions.insert(*target, position);
+                        break 'entity_listeners;
+                    }
+                    Action::AlterCounter(target, counter, f) => {
+                        if !ecs.counters.contains_key(*target) {
+                            ecs.counters.insert(*target, EnumMap::new());
+                        }
+                        let counters = ecs
+                            .counters
+                            .get_mut(*target)
+                            .expect("Should have ensured that the counters existed");
+                        counters[*counter] = f(counters[*counter]);
+                    }
+                    Action::PlayerMarkUsed(item, count) => {
+                        let player_id_option = ecs
+                            .positions
+                            .get(entity)
+                            .and_then(|pos| players.id_by_position(pos));
+                        if let Some(player_id) = player_id_option {
+                            let mut player = players
+                                .get_mut_by_id(player_id)
+                                .expect("Failed to re-borrow player");
+                            let item_count = player
+                                .inventory
+                                .count_items()
+                                .get(item)
+                                .copied()
+                                .unwrap_or(0);
+                            if item_count < *count {
+                                panic!("Not enough items for PlayerMarkUsed")
+                            }
+                            if let Inventory::Hypothetical(ref mut inventory) = player.inventory {
+                                let minimum = inventory.minima.entry(item.clone()).or_insert(0);
+                                *minimum = min(count - 1, *minimum);
+                            }
+                        };
+                    }
+                    Action::Reject(msg) => Err(*msg)?,
+                    Action::All(new_actions) => {
+                        actions.extend(new_actions.iter());
+                    }
+                }
+            }
         }
     }
 
