@@ -248,6 +248,8 @@ pub struct ImageMap {
     pub wall: graphics::Image,
     pub open_door: graphics::Image,
     pub closed_door: graphics::Image,
+    pub plate: graphics::Image,
+    pub lights: [graphics::Image; 4],
 }
 
 impl ImageMap {
@@ -263,6 +265,13 @@ impl ImageMap {
         let wall = graphics::Image::new(ctx, "/images/wall.png")?;
         let open_door = graphics::Image::new(ctx, "/images/open_door.png")?;
         let closed_door = graphics::Image::new(ctx, "/images/closed_door.png")?;
+        let plate = graphics::Image::new(ctx, "/images/plate.png")?;
+        let lights = [
+            graphics::Image::new(ctx, "/images/lights0.png")?,
+            graphics::Image::new(ctx, "/images/lights1.png")?,
+            graphics::Image::new(ctx, "/images/lights2.png")?,
+            graphics::Image::new(ctx, "/images/lights3.png")?,
+        ];
         Ok(ImageMap {
             player,
             selection,
@@ -275,6 +284,8 @@ impl ImageMap {
             wall,
             open_door,
             closed_door,
+            plate,
+            lights,
         })
     }
 }
@@ -804,12 +815,14 @@ impl ItemDrop {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug)]
 pub enum MapElement {
     Empty,
     Wall,
     ClosedDoor,
     OpenDoor,
+    Plate(Counter, Entity),
+    Light(Counter),
 }
 impl MapElement {
     pub fn image(self, image_map: &ImageMap) -> Option<&graphics::Image> {
@@ -818,11 +831,16 @@ impl MapElement {
             MapElement::Wall => Some(&image_map.wall),
             MapElement::ClosedDoor => Some(&image_map.closed_door),
             MapElement::OpenDoor => Some(&image_map.open_door),
+            MapElement::Plate(_, _) => Some(&image_map.plate),
+            MapElement::Light(_) => Some(&image_map.lights[0]),
         }
     }
     pub fn passable(self) -> bool {
         match self {
-            MapElement::Empty | MapElement::OpenDoor => true,
+            MapElement::Empty
+            | MapElement::OpenDoor
+            | MapElement::Plate(_, _)
+            | MapElement::Light(_) => true,
             MapElement::Wall | MapElement::ClosedDoor => false,
         }
     }
@@ -833,7 +851,7 @@ impl MapElement {
         }
         ecs.positions.insert(e, pt);
         let mut event_listeners = Vec::new();
-        if self == MapElement::ClosedDoor {
+        if let MapElement::ClosedDoor = self {
             let open = ecs.entities.insert(());
             ecs.images.insert(open, image_map.open_door.clone());
             event_listeners.push(EventListener {
@@ -844,6 +862,7 @@ impl MapElement {
                 ]),
             });
         }
+        if let MapElement::Light(counter) = self {}
         if !self.passable() {
             event_listeners.push(EventListener {
                 trigger: EventTrigger::PlayerIntersect,
@@ -899,6 +918,7 @@ objekt::clone_trait_object!(<A,B>CloneFn<A,B>);
 #[derivative(Debug)]
 pub enum EventTrigger {
     PlayerIntersect,
+    PlayerNotIntersect,
     PlayerIntersectHasItems(Item, usize),
     ItemIntersect(Item),
     CounterPredicate(

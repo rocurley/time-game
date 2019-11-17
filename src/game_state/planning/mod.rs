@@ -120,8 +120,13 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 EventTrigger::PlayerIntersect => ecs
                     .positions
                     .get(entity)
-                    .and_then(|pos| players.get_by_position(pos))
+                    .and_then(|pos| players.id_by_position(pos))
                     .is_some(),
+                EventTrigger::PlayerNotIntersect => ecs
+                    .positions
+                    .get(entity)
+                    .map(|pos| players.id_by_position(pos).is_none())
+                    .unwrap_or(false),
                 EventTrigger::PlayerIntersectHasItems(item, required_count) => ecs
                     .positions
                     .get(entity)
