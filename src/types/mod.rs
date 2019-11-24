@@ -9,6 +9,7 @@ use std::collections::{hash_map, HashMap, HashSet};
 use std::fmt;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
 
 pub const SCALE: f32 = 100.;
 pub const INVENTORY_WIDTH: usize = 8;
@@ -856,16 +857,55 @@ impl MapElement {
             ecs.images.insert(open, image_map.open_door.clone());
             event_listeners.push(EventListener {
                 trigger: EventTrigger::PlayerIntersectHasItems(Item::Key(Key {}), 1),
+                modifier: EventTriggerModifier::Unmodified,
                 action: Action::All(vec![
                     Action::PlayerMarkUsed(Item::Key(Key {}), 1),
                     Action::BecomeEntity(open),
                 ]),
             });
         }
-        if let MapElement::Light(counter) = self {}
+        if let MapElement::Light(counter) = self {
+            event_listeners.extend_from_slice(&[
+                EventListener {
+                    trigger: EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 0))),
+                    modifier: EventTriggerModifier::Unmodified,
+                    action: Action::SetImage(image_map.lights[0].clone()),
+                },
+                EventListener {
+                    trigger: EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 1))),
+                    modifier: EventTriggerModifier::Unmodified,
+                    action: Action::SetImage(image_map.lights[1].clone()),
+                },
+                EventListener {
+                    trigger: EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 2))),
+                    modifier: EventTriggerModifier::Unmodified,
+                    action: Action::SetImage(image_map.lights[2].clone()),
+                },
+                EventListener {
+                    trigger: EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 3))),
+                    modifier: EventTriggerModifier::Unmodified,
+                    action: Action::SetImage(image_map.lights[3].clone()),
+                },
+            ]);
+        }
+        if let MapElement::Plate(counter, target) = self {
+            event_listeners.extend_from_slice(&[
+                EventListener {
+                    trigger: EventTrigger::PlayerIntersect,
+                    modifier: EventTriggerModifier::Rising(false),
+                    action: Action::AlterCounter(target, counter, Rc::new(Box::new(|c| c + 1))),
+                },
+                EventListener {
+                    trigger: EventTrigger::PlayerIntersect,
+                    modifier: EventTriggerModifier::Falling(false),
+                    action: Action::AlterCounter(target, counter, Rc::new(Box::new(|c| c - 1))),
+                },
+            ]);
+        }
         if !self.passable() {
             event_listeners.push(EventListener {
                 trigger: EventTrigger::PlayerIntersect,
+                modifier: EventTriggerModifier::Unmodified,
                 action: Action::Reject("impassible"),
             });
         }
@@ -923,7 +963,7 @@ pub enum EventTrigger {
     ItemIntersect(Item),
     CounterPredicate(
         Counter,
-        #[derivative(Debug = "ignore")] Box<dyn CloneFn<i64, bool>>,
+        #[derivative(Debug = "ignore")] Rc<Box<dyn Fn(i64) -> bool>>,
     ),
 }
 
@@ -939,17 +979,27 @@ pub enum Action {
     AlterCounter(
         Entity,
         Counter,
-        #[derivative(Debug = "ignore")] Box<dyn CloneFn<i64, i64>>,
+        #[derivative(Debug = "ignore")] Rc<Box<dyn Fn(i64) -> i64>>,
     ),
     // Implicitly uses intersecting player; should maybe take an argument for how to find the player.
     PlayerMarkUsed(Item, usize),
     Reject(&'static str),
+    SetImage(graphics::Image),
     All(Vec<Action>),
+}
+
+#[derive(Clone, Debug)]
+pub enum EventTriggerModifier {
+    Unmodified,
+    Rising(bool),
+    Falling(bool),
+    Negated,
 }
 
 #[derive(Clone, Debug)]
 pub struct EventListener {
     pub trigger: EventTrigger,
+    pub modifier: EventTriggerModifier,
     pub action: Action,
     // TODO: Add priority to allow proper phasing
 }
@@ -965,12 +1015,6 @@ pub fn entities_at(ecs: &ECS, pt: Point) -> Vec<Entity> {
             }
         })
         .collect()
-}
-
-#[derive(Clone, Debug)]
-pub struct LockComponent {
-    pub unlocked_by: Item,
-    pub when_unlocked: Entity,
 }
 
 #[cfg(test)]

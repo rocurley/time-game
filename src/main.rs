@@ -1,7 +1,7 @@
 extern crate time_game_lib;
 
 use time_game_lib::game_state::GameState;
-use time_game_lib::types::{Item, ItemDrop, Key, MapElement, Player};
+use time_game_lib::types::{Counter, Item, ItemDrop, Key, MapElement, Player};
 
 extern crate ggez;
 use ggez::*;
@@ -78,5 +78,25 @@ pub fn main() {
             );
         }
     }
+    let light = MapElement::Light(Counter::Unlock).add(
+        &game_state.image_map,
+        Point2::new(5, 5),
+        &mut game_frame.ecs,
+    );
+    MapElement::Plate(Counter::Unlock, light).add(
+        &game_state.image_map,
+        Point2::new(4, 5),
+        &mut game_frame.ecs,
+    );
+    MapElement::Plate(Counter::Unlock, light).add(
+        &game_state.image_map,
+        Point2::new(3, 5),
+        &mut game_frame.ecs,
+    );
+    MapElement::Plate(Counter::Unlock, light).add(
+        &game_state.image_map,
+        Point2::new(2, 5),
+        &mut game_frame.ecs,
+    );
     event::run(ctx, game_state).unwrap();
 }

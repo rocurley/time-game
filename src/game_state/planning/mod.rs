@@ -13,8 +13,8 @@ use std::cmp::min;
 use std::iter;
 use std::ops::DerefMut;
 use types::{
-    entities_at, Action, Direction, DoubleMap, Entity, EventTrigger, GameError,
-    HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal,
+    entities_at, Action, Direction, DoubleMap, Entity, EventTrigger, EventTriggerModifier,
+    GameError, HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal,
 };
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, GameError> {
@@ -114,9 +114,9 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
         );
     }
 
-    for (entity, event_listeners) in ecs.event_listeners.iter() {
+    for (entity, event_listeners) in ecs.event_listeners.iter_mut() {
         'entity_listeners: for event_listener in event_listeners {
-            let triggered = match &event_listener.trigger {
+            let base_triggered = match &event_listener.trigger {
                 EventTrigger::PlayerIntersect => ecs
                     .positions
                     .get(entity)
@@ -146,6 +146,20 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                         .get(entity)
                         .map_or(0, |counters| counters[*counter]);
                     p(count)
+                }
+            };
+            let triggered = match &mut event_listener.modifier {
+                EventTriggerModifier::Unmodified => base_triggered,
+                EventTriggerModifier::Negated => !base_triggered,
+                EventTriggerModifier::Rising(triggered_prior) => {
+                    let triggered = !*triggered_prior && base_triggered;
+                    *triggered_prior = base_triggered;
+                    triggered
+                }
+                EventTriggerModifier::Falling(triggered_prior) => {
+                    let triggered = *triggered_prior && !base_triggered;
+                    *triggered_prior = base_triggered;
+                    triggered
                 }
             };
             if !triggered {
@@ -197,6 +211,9 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                                 *minimum = min(count - 1, *minimum);
                             }
                         };
+                    }
+                    Action::SetImage(img) => {
+                        ecs.images.insert(entity, img.clone());
                     }
                     Action::Reject(msg) => Err(*msg)?,
                     Action::All(new_actions) => {
