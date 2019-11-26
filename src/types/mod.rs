@@ -1,6 +1,7 @@
 use super::ggez::graphics;
 use super::ggez::nalgebra;
 use enum_map::EnumMap;
+use enumset::EnumSet;
 use slotmap::{HopSlotMap, SecondaryMap, SparseSecondaryMap};
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -840,9 +841,10 @@ impl MapElement {
         match self {
             MapElement::Empty
             | MapElement::OpenDoor
+            | MapElement::ClosedDoor // Dealt with later
             | MapElement::Plate(_, _)
             | MapElement::Light(_) => true,
-            MapElement::Wall | MapElement::ClosedDoor => false,
+            MapElement::Wall=> false,
         }
     }
     pub fn add(self, image_map: &ImageMap, pt: Point, ecs: &mut ECS) -> Entity {
@@ -855,59 +857,65 @@ impl MapElement {
         if let MapElement::ClosedDoor = self {
             let open = ecs.entities.insert(());
             ecs.images.insert(open, image_map.open_door.clone());
-            event_listeners.push(EventListener {
-                trigger: EventTrigger::PlayerIntersectHasItems(Item::Key(Key {}), 1),
-                modifier: EventTriggerModifier::Unmodified,
-                action: Action::All(vec![
-                    Action::PlayerMarkUsed(Item::Key(Key {}), 1),
-                    Action::BecomeEntity(open),
-                ]),
-            });
+            event_listeners.push(
+                EventListener::new(
+                    EventTrigger::PlayerIntersectHasItems(Item::Key(Key {}), 1),
+                    Action::All(vec![
+                        Action::PlayerMarkUsed(Item::Key(Key {}), 1),
+                        Action::SetImage(image_map.open_door.clone()),
+                        Action::DisableGroup(e, Group::Locked),
+                    ]),
+                )
+                .with_group(Group::Locked),
+            );
+            event_listeners.push(
+                EventListener::new(EventTrigger::PlayerIntersect, Action::Reject("Door locked"))
+                    .with_group(Group::Locked),
+            );
         }
         if let MapElement::Light(counter) = self {
             event_listeners.extend_from_slice(&[
-                EventListener {
-                    trigger: EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 0))),
-                    modifier: EventTriggerModifier::Unmodified,
-                    action: Action::SetImage(image_map.lights[0].clone()),
-                },
-                EventListener {
-                    trigger: EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 1))),
-                    modifier: EventTriggerModifier::Unmodified,
-                    action: Action::SetImage(image_map.lights[1].clone()),
-                },
-                EventListener {
-                    trigger: EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 2))),
-                    modifier: EventTriggerModifier::Unmodified,
-                    action: Action::SetImage(image_map.lights[2].clone()),
-                },
-                EventListener {
-                    trigger: EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 3))),
-                    modifier: EventTriggerModifier::Unmodified,
-                    action: Action::SetImage(image_map.lights[3].clone()),
-                },
+                EventListener::new(
+                    EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 0))),
+                    Action::SetImage(image_map.lights[0].clone()),
+                )
+                .with_priority(Priority::Cleanup),
+                EventListener::new(
+                    EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 1))),
+                    Action::SetImage(image_map.lights[1].clone()),
+                )
+                .with_priority(Priority::Cleanup),
+                EventListener::new(
+                    EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 2))),
+                    Action::SetImage(image_map.lights[2].clone()),
+                )
+                .with_priority(Priority::Cleanup),
+                EventListener::new(
+                    EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 3))),
+                    Action::SetImage(image_map.lights[3].clone()),
+                )
+                .with_priority(Priority::Cleanup),
             ]);
         }
         if let MapElement::Plate(counter, target) = self {
             event_listeners.extend_from_slice(&[
-                EventListener {
-                    trigger: EventTrigger::PlayerIntersect,
-                    modifier: EventTriggerModifier::Rising(false),
-                    action: Action::AlterCounter(target, counter, Rc::new(Box::new(|c| c + 1))),
-                },
-                EventListener {
-                    trigger: EventTrigger::PlayerIntersect,
-                    modifier: EventTriggerModifier::Falling(false),
-                    action: Action::AlterCounter(target, counter, Rc::new(Box::new(|c| c - 1))),
-                },
+                EventListener::new(
+                    EventTrigger::PlayerIntersect,
+                    Action::AlterCounter(target, counter, Rc::new(Box::new(|c| c + 1))),
+                )
+                .with_modifier(EventTriggerModifier::Rising(false)),
+                EventListener::new(
+                    EventTrigger::PlayerIntersect,
+                    Action::AlterCounter(target, counter, Rc::new(Box::new(|c| c - 1))),
+                )
+                .with_modifier(EventTriggerModifier::Falling(false)),
             ]);
         }
         if !self.passable() {
-            event_listeners.push(EventListener {
-                trigger: EventTrigger::PlayerIntersect,
-                modifier: EventTriggerModifier::Unmodified,
-                action: Action::Reject("impassible"),
-            });
+            event_listeners.push(EventListener::new(
+                EventTrigger::PlayerIntersect,
+                Action::Reject("impassible"),
+            ));
         }
         if !event_listeners.is_empty() {
             ecs.event_listeners.insert(e, event_listeners);
@@ -946,6 +954,7 @@ pub struct ECS {
     pub images: Components<graphics::Image>,
     pub positions: Components<Point>,
     pub event_listeners: Components<Vec<EventListener>>,
+    pub disabled_event_groups: Components<EnumSet<Group>>,
     pub counters: Components<EnumMap<Counter, i64>>,
 }
 
@@ -975,7 +984,6 @@ pub enum Counter {
 #[derive(Clone, Derivative)]
 #[derivative(Debug)]
 pub enum Action {
-    BecomeEntity(Entity),
     AlterCounter(
         Entity,
         Counter,
@@ -985,6 +993,8 @@ pub enum Action {
     PlayerMarkUsed(Item, usize),
     Reject(&'static str),
     SetImage(graphics::Image),
+    EnableGroup(Entity, Group),
+    DisableGroup(Entity, Group),
     All(Vec<Action>),
 }
 
@@ -996,12 +1006,49 @@ pub enum EventTriggerModifier {
     Negated,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Priority {
+    Main,
+    Cleanup,
+}
+
+#[derive(Debug, EnumSetType)]
+pub enum Group {
+    Default,
+    Locked,
+}
+
 #[derive(Clone, Debug)]
 pub struct EventListener {
     pub trigger: EventTrigger,
     pub modifier: EventTriggerModifier,
     pub action: Action,
-    // TODO: Add priority to allow proper phasing
+    pub group: Group,
+    pub priority: Priority,
+}
+
+impl EventListener {
+    pub fn new(trigger: EventTrigger, action: Action) -> Self {
+        EventListener {
+            trigger,
+            modifier: EventTriggerModifier::Unmodified,
+            action,
+            group: Group::Default,
+            priority: Priority::Main,
+        }
+    }
+    pub fn with_group(mut self, group: Group) -> Self {
+        self.group = group;
+        self
+    }
+    pub fn with_modifier(mut self, modifier: EventTriggerModifier) -> Self {
+        self.modifier = modifier;
+        self
+    }
+    pub fn with_priority(mut self, priority: Priority) -> Self {
+        self.priority = priority;
+        self
+    }
 }
 
 pub fn entities_at(ecs: &ECS, pt: Point) -> Vec<Entity> {

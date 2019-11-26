@@ -3,6 +3,7 @@ use petgraph::visit;
 use petgraph::visit::IntoNeighbors;
 
 use enum_map::EnumMap;
+use enumset::EnumSet;
 use game_frame::GameFrame;
 use ggez::nalgebra;
 use portal_graph::{
@@ -114,111 +115,130 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
         );
     }
 
-    for (entity, event_listeners) in ecs.event_listeners.iter_mut() {
-        'entity_listeners: for event_listener in event_listeners {
-            let base_triggered = match &event_listener.trigger {
-                EventTrigger::PlayerIntersect => ecs
-                    .positions
+    let mut event_listeners = ecs
+        .event_listeners
+        .iter_mut()
+        .flat_map(|(entity, listeners)| listeners.iter_mut().map(move |event| (entity, event)))
+        .collect::<Vec<_>>();
+    event_listeners.sort_by_key(|(_, listener)| listener.priority);
+    for (entity, event_listener) in event_listeners {
+        let disabled = ecs
+            .disabled_event_groups
+            .get(entity)
+            .map_or(false, |disabled| disabled.contains(event_listener.group));
+        if disabled {
+            continue;
+        }
+        let base_triggered = match &event_listener.trigger {
+            EventTrigger::PlayerIntersect => ecs
+                .positions
+                .get(entity)
+                .and_then(|pos| players.id_by_position(pos))
+                .is_some(),
+            EventTrigger::PlayerNotIntersect => ecs
+                .positions
+                .get(entity)
+                .map(|pos| players.id_by_position(pos).is_none())
+                .unwrap_or(false),
+            EventTrigger::PlayerIntersectHasItems(item, required_count) => ecs
+                .positions
+                .get(entity)
+                .and_then(|pos| players.get_by_position(pos))
+                .and_then(|player| player.inventory.count_items().get(&item).copied())
+                .filter(|c| c >= required_count)
+                .is_some(),
+            EventTrigger::ItemIntersect(item) => ecs
+                .positions
+                .get(entity)
+                .and_then(|pos| items.get_by_position(pos))
+                .filter(|drop| drop.item == *item)
+                .is_some(),
+            EventTrigger::CounterPredicate(counter, p) => {
+                let count = ecs
+                    .counters
                     .get(entity)
-                    .and_then(|pos| players.id_by_position(pos))
-                    .is_some(),
-                EventTrigger::PlayerNotIntersect => ecs
-                    .positions
-                    .get(entity)
-                    .map(|pos| players.id_by_position(pos).is_none())
-                    .unwrap_or(false),
-                EventTrigger::PlayerIntersectHasItems(item, required_count) => ecs
-                    .positions
-                    .get(entity)
-                    .and_then(|pos| players.get_by_position(pos))
-                    .and_then(|player| player.inventory.count_items().get(&item).copied())
-                    .filter(|c| c >= required_count)
-                    .is_some(),
-                EventTrigger::ItemIntersect(item) => ecs
-                    .positions
-                    .get(entity)
-                    .and_then(|pos| items.get_by_position(pos))
-                    .filter(|drop| drop.item == *item)
-                    .is_some(),
-                EventTrigger::CounterPredicate(counter, p) => {
-                    let count = ecs
-                        .counters
-                        .get(entity)
-                        .map_or(0, |counters| counters[*counter]);
-                    p(count)
-                }
-            };
-            let triggered = match &mut event_listener.modifier {
-                EventTriggerModifier::Unmodified => base_triggered,
-                EventTriggerModifier::Negated => !base_triggered,
-                EventTriggerModifier::Rising(triggered_prior) => {
-                    let triggered = !*triggered_prior && base_triggered;
-                    *triggered_prior = base_triggered;
-                    triggered
-                }
-                EventTriggerModifier::Falling(triggered_prior) => {
-                    let triggered = *triggered_prior && !base_triggered;
-                    *triggered_prior = base_triggered;
-                    triggered
-                }
-            };
-            if !triggered {
-                continue;
+                    .map_or(0, |counters| counters[*counter]);
+                p(count)
             }
-            // We avoid explicit recursion to avoid the borrow checker thinking we might mutate
-            // ecs.event_listeners
-            let mut actions = vec![&event_listener.action];
-            while let Some(action) = actions.pop() {
-                match action {
-                    Action::BecomeEntity(target) => {
-                        let position = ecs
-                            .positions
-                            .remove(entity)
-                            .expect("Can't find positions for entity to remove swap");
-                        ecs.positions.insert(*target, position);
-                        break 'entity_listeners;
+        };
+        let triggered = match &mut event_listener.modifier {
+            EventTriggerModifier::Unmodified => base_triggered,
+            EventTriggerModifier::Negated => !base_triggered,
+            EventTriggerModifier::Rising(triggered_prior) => {
+                let triggered = !*triggered_prior && base_triggered;
+                *triggered_prior = base_triggered;
+                triggered
+            }
+            EventTriggerModifier::Falling(triggered_prior) => {
+                let triggered = *triggered_prior && !base_triggered;
+                *triggered_prior = base_triggered;
+                triggered
+            }
+        };
+        if !triggered {
+            continue;
+        }
+        // We avoid explicit recursion to avoid the borrow checker thinking we might mutate
+        // ecs.event_listeners
+        let mut actions = vec![&event_listener.action];
+        while let Some(action) = actions.pop() {
+            match action {
+                Action::AlterCounter(target, counter, f) => {
+                    if !ecs.counters.contains_key(*target) {
+                        ecs.counters.insert(*target, EnumMap::new());
                     }
-                    Action::AlterCounter(target, counter, f) => {
-                        if !ecs.counters.contains_key(*target) {
-                            ecs.counters.insert(*target, EnumMap::new());
+                    let counters = ecs
+                        .counters
+                        .get_mut(*target)
+                        .expect("Should have ensured that the counters existed");
+                    counters[*counter] = f(counters[*counter]);
+                }
+                Action::PlayerMarkUsed(item, count) => {
+                    let player_id_option = ecs
+                        .positions
+                        .get(entity)
+                        .and_then(|pos| players.id_by_position(pos));
+                    if let Some(player_id) = player_id_option {
+                        let mut player = players
+                            .get_mut_by_id(player_id)
+                            .expect("Failed to re-borrow player");
+                        let item_count = player
+                            .inventory
+                            .count_items()
+                            .get(item)
+                            .copied()
+                            .unwrap_or(0);
+                        if item_count < *count {
+                            panic!("Not enough items for PlayerMarkUsed")
                         }
-                        let counters = ecs
-                            .counters
-                            .get_mut(*target)
-                            .expect("Should have ensured that the counters existed");
-                        counters[*counter] = f(counters[*counter]);
+                        if let Inventory::Hypothetical(ref mut inventory) = player.inventory {
+                            let minimum = inventory.minima.entry(item.clone()).or_insert(0);
+                            *minimum = min(count - 1, *minimum);
+                        }
+                    };
+                }
+                Action::SetImage(img) => {
+                    ecs.images.insert(entity, img.clone());
+                }
+                Action::EnableGroup(target, group) => {
+                    if let Some(disabled_groups) = ecs.disabled_event_groups.get_mut(*target) {
+                        disabled_groups.remove(*group);
                     }
-                    Action::PlayerMarkUsed(item, count) => {
-                        let player_id_option = ecs
-                            .positions
-                            .get(entity)
-                            .and_then(|pos| players.id_by_position(pos));
-                        if let Some(player_id) = player_id_option {
-                            let mut player = players
-                                .get_mut_by_id(player_id)
-                                .expect("Failed to re-borrow player");
-                            let item_count = player
-                                .inventory
-                                .count_items()
-                                .get(item)
-                                .copied()
-                                .unwrap_or(0);
-                            if item_count < *count {
-                                panic!("Not enough items for PlayerMarkUsed")
-                            }
-                            if let Inventory::Hypothetical(ref mut inventory) = player.inventory {
-                                let minimum = inventory.minima.entry(item.clone()).or_insert(0);
-                                *minimum = min(count - 1, *minimum);
-                            }
-                        };
+                }
+                Action::DisableGroup(target, group) => {
+                    match ecs.disabled_event_groups.get_mut(*target) {
+                        Some(disabled_groups) => {
+                            disabled_groups.insert(*group);
+                        }
+                        None => {
+                            ecs.disabled_event_groups
+                                .insert(*target, EnumSet::only(*group));
+                        }
                     }
-                    Action::SetImage(img) => {
-                        ecs.images.insert(entity, img.clone());
-                    }
-                    Action::Reject(msg) => Err(*msg)?,
-                    Action::All(new_actions) => {
-                        actions.extend(new_actions.iter());
-                    }
+                }
+                Action::Reject(msg) => Err(*msg)?,
+                Action::All(new_actions) => {
+                    actions.extend(new_actions.iter());
                 }
             }
         }

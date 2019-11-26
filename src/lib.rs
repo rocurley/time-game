@@ -15,6 +15,8 @@ extern crate derivative;
 extern crate objekt;
 #[macro_use]
 extern crate enum_map;
+#[macro_use]
+extern crate enumset;
 
 mod game_frame;
 pub mod game_state;
