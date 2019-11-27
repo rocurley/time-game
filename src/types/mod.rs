@@ -817,106 +817,137 @@ impl ItemDrop {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum MapElement {
     Empty,
     Wall,
     ClosedDoor,
+    RemoteDoor,
     OpenDoor,
     Plate(Counter, Entity),
-    Light(Counter),
+    Light {
+        counter: Counter,
+        rising: Action,
+        falling: Action,
+    },
 }
 impl MapElement {
-    pub fn image(self, image_map: &ImageMap) -> Option<&graphics::Image> {
+    pub fn image<'im>(&self, image_map: &'im ImageMap) -> Option<&'im graphics::Image> {
         match self {
             MapElement::Empty => None,
             MapElement::Wall => Some(&image_map.wall),
-            MapElement::ClosedDoor => Some(&image_map.closed_door),
+            MapElement::ClosedDoor | MapElement::RemoteDoor => Some(&image_map.closed_door),
             MapElement::OpenDoor => Some(&image_map.open_door),
             MapElement::Plate(_, _) => Some(&image_map.plate),
-            MapElement::Light(_) => Some(&image_map.lights[0]),
+            MapElement::Light { .. } => Some(&image_map.lights[0]),
         }
     }
-    pub fn passable(self) -> bool {
+    pub fn passable(&self) -> bool {
         match self {
             MapElement::Empty
             | MapElement::OpenDoor
             | MapElement::ClosedDoor // Dealt with later
+            | MapElement::RemoteDoor // Dealt with later
             | MapElement::Plate(_, _)
-            | MapElement::Light(_) => true,
+            | MapElement::Light{..} => true,
             MapElement::Wall=> false,
         }
     }
-    pub fn add(self, image_map: &ImageMap, pt: Point, ecs: &mut ECS) -> Entity {
+    pub fn add(&self, image_map: &ImageMap, pt: Point, ecs: &mut ECS) -> Entity {
         let e = ecs.entities.insert(());
         if let Some(image) = self.image(image_map) {
             ecs.images.insert(e, image.clone());
         }
         ecs.positions.insert(e, pt);
         let mut event_listeners = Vec::new();
-        if let MapElement::ClosedDoor = self {
-            let open = ecs.entities.insert(());
-            ecs.images.insert(open, image_map.open_door.clone());
-            event_listeners.push(
-                EventListener::new(
-                    EventTrigger::PlayerIntersectHasItems(Item::Key(Key {}), 1),
-                    Action::All(vec![
-                        Action::PlayerMarkUsed(Item::Key(Key {}), 1),
-                        Action::SetImage(image_map.open_door.clone()),
-                        Action::DisableGroup(e, Group::Locked),
-                    ]),
-                )
-                .with_group(Group::Locked),
-            );
-            event_listeners.push(
-                EventListener::new(EventTrigger::PlayerIntersect, Action::Reject("Door locked"))
+        match self {
+            MapElement::ClosedDoor => {
+                event_listeners.push(
+                    EventListener::new(
+                        EventTrigger::PlayerIntersectHasItems(Item::Key(Key {}), 1),
+                        Action::All(vec![
+                            Action::PlayerMarkUsed(Item::Key(Key {}), 1),
+                            Action::SetImage {
+                                target: e,
+                                img: image_map.open_door.clone(),
+                            },
+                            Action::DisableGroup(e, Group::Locked),
+                        ]),
+                    )
                     .with_group(Group::Locked),
-            );
-        }
-        if let MapElement::Light(counter) = self {
-            event_listeners.extend_from_slice(&[
-                EventListener::new(
-                    EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 0))),
-                    Action::SetImage(image_map.lights[0].clone()),
-                )
-                .with_priority(Priority::Cleanup),
-                EventListener::new(
-                    EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 1))),
-                    Action::SetImage(image_map.lights[1].clone()),
-                )
-                .with_priority(Priority::Cleanup),
-                EventListener::new(
-                    EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 2))),
-                    Action::SetImage(image_map.lights[2].clone()),
-                )
-                .with_priority(Priority::Cleanup),
-                EventListener::new(
-                    EventTrigger::CounterPredicate(counter, Rc::new(Box::new(|c| c == 3))),
-                    Action::SetImage(image_map.lights[3].clone()),
-                )
-                .with_priority(Priority::Cleanup),
-            ]);
-        }
-        if let MapElement::Plate(counter, target) = self {
-            event_listeners.extend_from_slice(&[
-                EventListener::new(
+                );
+                event_listeners.push(
+                    EventListener::new(
+                        EventTrigger::PlayerIntersect,
+                        Action::Reject("Door locked"),
+                    )
+                    .with_group(Group::Locked),
+                );
+            }
+            MapElement::RemoteDoor => {
+                event_listeners.push(
+                    EventListener::new(
+                        EventTrigger::PlayerIntersect,
+                        Action::Reject("Door locked remotely"),
+                    )
+                    .with_group(Group::Locked),
+                );
+            }
+            MapElement::Light {
+                counter,
+                rising,
+                falling,
+            } => {
+                event_listeners.extend((0..4).map(|i| {
+                    EventListener::new(
+                        EventTrigger::CounterPredicate(
+                            *counter,
+                            Rc::new(Box::new(move |c| c == i)),
+                        ),
+                        Action::SetImage {
+                            target: e,
+                            img: image_map.lights[i as usize].clone(),
+                        },
+                    )
+                    .with_priority(Priority::Cleanup)
+                }));
+                event_listeners.extend_from_slice(&[
+                    EventListener::new(
+                        EventTrigger::CounterPredicate(*counter, Rc::new(Box::new(|c| c == 3))),
+                        rising.clone(),
+                    )
+                    .with_priority(Priority::Cleanup)
+                    .with_modifier(EventTriggerModifier::Rising(false)),
+                    EventListener::new(
+                        EventTrigger::CounterPredicate(*counter, Rc::new(Box::new(|c| c == 3))),
+                        falling.clone(),
+                    )
+                    .with_priority(Priority::Cleanup)
+                    .with_modifier(EventTriggerModifier::Falling(false)),
+                ]);
+            }
+            MapElement::Plate(counter, target) => {
+                event_listeners.extend_from_slice(&[
+                    EventListener::new(
+                        EventTrigger::PlayerIntersect,
+                        Action::AlterCounter(*target, *counter, Rc::new(Box::new(|c| c + 1))),
+                    )
+                    .with_modifier(EventTriggerModifier::Rising(false)),
+                    EventListener::new(
+                        EventTrigger::PlayerIntersect,
+                        Action::AlterCounter(*target, *counter, Rc::new(Box::new(|c| c - 1))),
+                    )
+                    .with_modifier(EventTriggerModifier::Falling(false)),
+                ]);
+            }
+            MapElement::Wall => {
+                event_listeners.push(EventListener::new(
                     EventTrigger::PlayerIntersect,
-                    Action::AlterCounter(target, counter, Rc::new(Box::new(|c| c + 1))),
-                )
-                .with_modifier(EventTriggerModifier::Rising(false)),
-                EventListener::new(
-                    EventTrigger::PlayerIntersect,
-                    Action::AlterCounter(target, counter, Rc::new(Box::new(|c| c - 1))),
-                )
-                .with_modifier(EventTriggerModifier::Falling(false)),
-            ]);
-        }
-        if !self.passable() {
-            event_listeners.push(EventListener::new(
-                EventTrigger::PlayerIntersect,
-                Action::Reject("impassible"),
-            ));
-        }
+                    Action::Reject("impassible"),
+                ));
+            }
+            _ => {}
+        };
         if !event_listeners.is_empty() {
             ecs.event_listeners.insert(e, event_listeners);
         }
@@ -992,7 +1023,10 @@ pub enum Action {
     // Implicitly uses intersecting player; should maybe take an argument for how to find the player.
     PlayerMarkUsed(Item, usize),
     Reject(&'static str),
-    SetImage(graphics::Image),
+    SetImage {
+        target: Entity,
+        img: graphics::Image,
+    },
     EnableGroup(Entity, Group),
     DisableGroup(Entity, Group),
     All(Vec<Action>),

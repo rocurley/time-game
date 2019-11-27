@@ -217,8 +217,8 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                         }
                     };
                 }
-                Action::SetImage(img) => {
-                    ecs.images.insert(entity, img.clone());
+                Action::SetImage { target, img } => {
+                    ecs.images.insert(*target, img.clone());
                 }
                 Action::EnableGroup(target, group) => {
                     if let Some(disabled_groups) = ecs.disabled_event_groups.get_mut(*target) {

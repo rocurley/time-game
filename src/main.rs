@@ -1,7 +1,7 @@
 extern crate time_game_lib;
 
 use time_game_lib::game_state::GameState;
-use time_game_lib::types::{Counter, Item, ItemDrop, Key, MapElement, Player};
+use time_game_lib::types::{Action, Counter, Group, Item, ItemDrop, Key, MapElement, Player};
 
 extern crate ggez;
 use ggez::*;
@@ -78,7 +78,29 @@ pub fn main() {
             );
         }
     }
-    let light = MapElement::Light(Counter::Unlock).add(
+    let light_door = MapElement::RemoteDoor.add(
+        &game_state.image_map,
+        Point2::new(5, 6),
+        &mut game_frame.ecs,
+    );
+    let light = MapElement::Light {
+        counter: Counter::Unlock,
+        rising: Action::All(vec![
+            Action::SetImage {
+                target: light_door,
+                img: game_state.image_map.open_door.clone(),
+            },
+            Action::DisableGroup(light_door, Group::Locked),
+        ]),
+        falling: Action::All(vec![
+            Action::SetImage {
+                target: light_door,
+                img: game_state.image_map.closed_door.clone(),
+            },
+            Action::EnableGroup(light_door, Group::Locked),
+        ]),
+    }
+    .add(
         &game_state.image_map,
         Point2::new(5, 5),
         &mut game_frame.ecs,
