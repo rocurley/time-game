@@ -3,19 +3,21 @@ use petgraph::{
     visit::{self, IntoNeighbors},
 };
 
+use crate::{
+    game_frame::GameFrame,
+    portal_graph::{
+        find_latest_held, find_latest_held_index, render_item_graph, signed_wish,
+        ItemPortalGraphNode, PlayerPortalGraphNode,
+    },
+    types::{
+        Action, Direction, DoubleMap, EventTrigger, EventTriggerModifier, GameError,
+        HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal,
+    },
+};
 use enum_map::EnumMap;
 use enumset::EnumSet;
-use game_frame::GameFrame;
 use ggez::nalgebra;
-use portal_graph::{
-    find_latest_held, find_latest_held_index, render_item_graph, signed_wish, ItemPortalGraphNode,
-    PlayerPortalGraphNode,
-};
 use std::{cmp::min, iter, ops::DerefMut};
-use types::{
-    Action, Direction, DoubleMap, EventTrigger, EventTriggerModifier, GameError,
-    HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal,
-};
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, GameError> {
     let mut portals = initial_frame.portals.clone();

@@ -2,6 +2,7 @@
 name = "time_game"
 version = "0.1.0"
 authors = ["Roger Curley <rocurley@gmail.com>"]
+edition = "2018"
 
 [[bin]]
 name = "time_game"

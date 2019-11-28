@@ -1,9 +1,11 @@
 use super::apply_plan;
-use game_frame::GameFrame;
+use crate::{
+    game_frame::GameFrame,
+    types::{Direction, Move, Plan, Player},
+};
 use ggez::nalgebra::Point2;
 use proptest::{self, prelude::*};
 use std::collections::HashSet;
-use types::{Direction, Move, Plan, Player};
 
 static POSSIBLE_MOVES: [Move; 5] = [
     Move::Jump,

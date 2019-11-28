@@ -6,8 +6,8 @@ use time_game_lib::{
 };
 
 extern crate ggez;
+use crate::nalgebra::Point2;
 use ggez::*;
-use nalgebra::Point2;
 
 use std::{env, path};
 

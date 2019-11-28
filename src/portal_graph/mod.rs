@@ -1,6 +1,6 @@
+use crate::types::{Id, ItemDrop, Player, Portal};
 use petgraph::{dot::Dot, graphmap::DiGraphMap, Direction::Incoming, Graph};
 use std::{cmp::Ordering, collections::HashMap};
-use types::{Id, ItemDrop, Player, Portal};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum PlayerPortalGraphNode {
