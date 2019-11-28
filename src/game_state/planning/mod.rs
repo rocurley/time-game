@@ -1,6 +1,7 @@
-use petgraph::graphmap::GraphMap;
-use petgraph::visit;
-use petgraph::visit::IntoNeighbors;
+use petgraph::{
+    graphmap::GraphMap,
+    visit::{self, IntoNeighbors},
+};
 
 use enum_map::EnumMap;
 use enumset::EnumSet;
@@ -10,12 +11,10 @@ use portal_graph::{
     find_latest_held, find_latest_held_index, render_item_graph, signed_wish, ItemPortalGraphNode,
     PlayerPortalGraphNode,
 };
-use std::cmp::min;
-use std::iter;
-use std::ops::DerefMut;
+use std::{cmp::min, iter, ops::DerefMut};
 use types::{
-    entities_at, Action, Direction, DoubleMap, Entity, EventTrigger, EventTriggerModifier,
-    GameError, HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal,
+    Action, Direction, DoubleMap, EventTrigger, EventTriggerModifier, GameError,
+    HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal,
 };
 
 pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, GameError> {

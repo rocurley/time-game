@@ -1,7 +1,9 @@
 extern crate time_game_lib;
 
-use time_game_lib::game_state::GameState;
-use time_game_lib::types::{Action, Counter, Group, Item, ItemDrop, Key, MapElement, Player};
+use time_game_lib::{
+    game_state::GameState,
+    types::{Action, Counter, Group, Item, ItemDrop, Key, MapElement, Player},
+};
 
 extern crate ggez;
 use ggez::*;

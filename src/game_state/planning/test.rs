@@ -1,8 +1,7 @@
 use super::apply_plan;
 use game_frame::GameFrame;
 use ggez::nalgebra::Point2;
-use proptest;
-use proptest::prelude::*;
+use proptest::{self, prelude::*};
 use std::collections::HashSet;
 use types::{Direction, Move, Plan, Player};
 

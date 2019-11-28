@@ -1,16 +1,19 @@
-use super::ggez::graphics;
-use super::ggez::nalgebra;
+use super::ggez::{graphics, nalgebra};
 use enum_map::EnumMap;
 use enumset::EnumSet;
 use slotmap::{HopSlotMap, SecondaryMap, SparseSecondaryMap};
-use std::borrow::Cow;
-use std::cmp::Ordering;
-use std::collections::hash_map::Entry;
-use std::collections::{hash_map, HashMap, HashSet};
-use std::fmt;
-use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
+use std::{
+    borrow::Cow,
+    cmp::Ordering,
+    collections::{
+        hash_map::{self, Entry},
+        HashMap, HashSet,
+    },
+    fmt,
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+    rc::Rc,
+};
 
 pub const SCALE: f32 = 100.;
 pub const INVENTORY_WIDTH: usize = 8;
@@ -1103,8 +1106,10 @@ mod tests {
     use super::{
         add_to_cells, ActualInventory, HypotheticalInventory, Inventory, InventoryCell, Item, Key,
     };
-    use proptest::arbitrary::{any, Arbitrary};
-    use proptest::strategy::{BoxedStrategy, Strategy};
+    use proptest::{
+        arbitrary::{any, Arbitrary},
+        strategy::{BoxedStrategy, Strategy},
+    };
 
     impl Arbitrary for Item {
         type Parameters = ();

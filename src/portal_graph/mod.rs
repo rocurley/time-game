@@ -1,9 +1,5 @@
-use petgraph::dot::Dot;
-use petgraph::graphmap::DiGraphMap;
-use petgraph::Direction::Incoming;
-use petgraph::Graph;
-use std::cmp::Ordering;
-use std::collections::HashMap;
+use petgraph::{dot::Dot, graphmap::DiGraphMap, Direction::Incoming, Graph};
+use std::{cmp::Ordering, collections::HashMap};
 use types::{Id, ItemDrop, Player, Portal};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]

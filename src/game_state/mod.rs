@@ -1,19 +1,20 @@
-use ggez::graphics::Drawable;
-use ggez::graphics::Point2;
-use ggez::{event, graphics};
+use ggez::{
+    event,
+    graphics::{
+        self, {Drawable, Point2},
+    },
+};
 
 use std::f32::consts::PI;
 
-use ggez::nalgebra;
-use ggez::nalgebra::{Similarity2, Vector2};
+use ggez::nalgebra::{self, Similarity2, Vector2};
 
 use game_frame::*;
 use types::*;
 
 use super::tree;
 use portal_graph::render_item_graph;
-use render;
-use render::{draw_map_grid, inventory_bbox, pixel_space_to_tile_space, render_inventory};
+use render::{self, draw_map_grid, inventory_bbox, pixel_space_to_tile_space, render_inventory};
 
 mod planning;
 

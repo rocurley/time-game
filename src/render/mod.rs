@@ -1,5 +1,4 @@
-use self::graphics::Drawable;
-use self::graphics::Point2;
+use self::graphics::{Drawable, Point2};
 use super::ggez::graphics;
 
 use self::nalgebra::{Similarity2, Vector2};

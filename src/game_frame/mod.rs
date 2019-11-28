@@ -1,10 +1,8 @@
 use petgraph::graphmap::GraphMap;
-use portal_graph;
 use portal_graph::{
-    ItemPortalGraph, ItemPortalGraphNode, PlayerPortalGraph, PlayerPortalGraphNode,
+    self, ItemPortalGraph, ItemPortalGraphNode, PlayerPortalGraph, PlayerPortalGraphNode,
 };
-use std::collections::HashMap;
-use std::fmt;
+use std::{collections::HashMap, fmt};
 use types::{DoubleMap, GameError, Id, Inventory, Item, ItemDrop, Player, Portal, ECS};
 
 #[derive(Clone)]
