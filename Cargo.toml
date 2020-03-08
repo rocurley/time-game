@@ -13,7 +13,7 @@ name = "time_game_lib"
 path = "src/lib.rs"
 
 [dependencies]
-ggez = "0.4"
+ggez = "0.5"
 rand = "0.4.1"
 proptest = "0.9"
 petgraph = "0.4.13"

@@ -14,7 +14,7 @@ use std::{env, path};
 pub fn main() {
     let mut cb = ContextBuilder::new("time game", "Roger")
         .window_setup(conf::WindowSetup::default().title("Time Game"))
-        .window_mode(conf::WindowMode::default().dimensions(1000, 1000));
+        .window_mode(conf::WindowMode::default().dimensions(1000., 1000.));
 
     if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
         let mut path = path::PathBuf::from(manifest_dir);
@@ -28,7 +28,7 @@ pub fn main() {
         println!("Not building from cargo?  Ok.");
     }
 
-    let ctx = &mut cb.build().unwrap();
+    let (ctx, event_loop) = &mut cb.build().unwrap();
     let game_state = &mut GameState::new(ctx).unwrap();
     let game_frame = game_state.history.get_focus_val_mut();
     game_frame
@@ -122,5 +122,5 @@ pub fn main() {
         Point2::new(2, 5),
         &mut game_frame.ecs,
     );
-    event::run(ctx, game_state).unwrap();
+    event::run(ctx, event_loop, game_state).unwrap();
 }

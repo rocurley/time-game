@@ -1,8 +1,7 @@
 use ggez::{
     event,
-    graphics::{self, Drawable, Point2},
+    graphics::{self, Color, DrawParam, Drawable},
 };
-
 use std::f32::consts::PI;
 
 use ggez::nalgebra::{self, Similarity2, Vector2};
@@ -16,6 +15,7 @@ use crate::{
 };
 
 mod planning;
+type Point2 = ggez::nalgebra::Point2<f32>;
 
 pub struct GameState {
     pub history: tree::Zipper<GameFrame, Plan>,
@@ -135,9 +135,8 @@ impl GameState {
 }
 
 fn world_selection(pt: Point2, ctx: &ggez::Context, game_state: &GameState) -> Selection {
-    let world_space_pt: Point =
-        pixel_space_to_tile_space(pt, graphics::get_screen_coordinates(ctx))
-            .expect("Somehow clicked outside window");
+    let world_space_pt: Point = pixel_space_to_tile_space(pt, graphics::screen_coordinates(ctx))
+        .expect("Somehow clicked outside window");
     let player = game_state
         .history
         .get_focus_val()
@@ -165,10 +164,10 @@ impl event::EventHandler for GameState {
         &mut self,
         ctx: &mut ggez::Context,
         button: event::MouseButton,
-        x: i32,
-        y: i32,
+        x: f32,
+        y: f32,
     ) {
-        let pt = Point2::new(x as f32, y as f32);
+        let pt = [x, y].into();
         let result = match button {
             event::MouseButton::Left => self.left_click_event(ctx, pt),
             _ => Ok(()),
@@ -180,24 +179,24 @@ impl event::EventHandler for GameState {
     fn key_down_event(
         &mut self,
         _ctx: &mut ggez::Context,
-        key: event::Keycode,
-        _keymod: event::Mod,
+        key: event::KeyCode,
+        _keymods: event::KeyMods,
         _repeat: bool,
     ) {
-        use self::event::Keycode;
+        use self::event::KeyCode;
         match self.selected {
             Selection::Player(player_id) => {
                 enum Update {
                     Move(Move),
-                    Other(Keycode),
+                    Other(KeyCode),
                 }
                 let update = match key {
-                    Keycode::W => Update::Move(Move::Direction(Direction::Up)),
-                    Keycode::A => Update::Move(Move::Direction(Direction::Left)),
-                    Keycode::S => Update::Move(Move::Direction(Direction::Down)),
-                    Keycode::D => Update::Move(Move::Direction(Direction::Right)),
-                    Keycode::Q => Update::Move(Move::Jump),
-                    Keycode::G => Update::Move(Move::PickUp),
+                    KeyCode::W => Update::Move(Move::Direction(Direction::Up)),
+                    KeyCode::A => Update::Move(Move::Direction(Direction::Left)),
+                    KeyCode::S => Update::Move(Move::Direction(Direction::Down)),
+                    KeyCode::D => Update::Move(Move::Direction(Direction::Right)),
+                    KeyCode::Q => Update::Move(Move::Jump),
+                    KeyCode::G => Update::Move(Move::PickUp),
                     keycode => Update::Other(keycode),
                 };
                 match update {
@@ -207,20 +206,20 @@ impl event::EventHandler for GameState {
                             .moves
                             .insert(player_id, new_move);
                     }
-                    Update::Other(Keycode::Space) => {
+                    Update::Other(KeyCode::Space) => {
                         self.current_plan
                             .cow(&self.history.focus.children)
                             .moves
                             .remove(&player_id);
                     }
-                    Update::Other(Keycode::I) => {
+                    Update::Other(KeyCode::I) => {
                         self.selected = Selection::Inventory(player_id, None);
                     }
                     _ => {}
                 }
             }
             Selection::GridCell(pt) => {
-                if let Keycode::Q = key {
+                if let KeyCode::Q = key {
                     if self
                         .current_plan
                         .get(&self.history.focus.children)
@@ -240,20 +239,20 @@ impl event::EventHandler for GameState {
                 }
             }
             Selection::Inventory(player_id, Some(ix)) => match key {
-                Keycode::T => {
+                KeyCode::T => {
                     self.current_plan
                         .cow(&self.history.focus.children)
                         .moves
                         .insert(player_id, Move::Drop(ix));
                 }
-                Keycode::Equals => {
+                KeyCode::Equals => {
                     let game_frame = self.history.get_focus_val_mut();
                     let wish_result = game_frame.wish(player_id, ix, None);
                     if let FrameWishResult::NoItem = wish_result {
                         self.selected = Selection::WishPicker(player_id, ix);
                     }
                 }
-                Keycode::Minus => {
+                KeyCode::Minus => {
                     let game_frame = self.history.get_focus_val_mut();
                     if let Err(err) = game_frame.unwish(player_id, ix) {
                         println!("{}", err)
@@ -268,18 +267,18 @@ impl event::EventHandler for GameState {
         }
 
         match key {
-            Keycode::Tab => {
+            KeyCode::Tab => {
                 if let Err(err) = self.rotate_plan() {
                     println!("{}", err);
                 }
             }
-            Keycode::Backspace => match self.history.up() {
+            KeyCode::Back => match self.history.up() {
                 Ok(ix) => {
                     self.current_plan = CachablePlan::Old(ix);
                 }
                 Err(err) => println!("{}", err),
             },
-            Keycode::Return => match planning::apply_plan(
+            KeyCode::Return => match planning::apply_plan(
                 &self.history.get_focus_val(),
                 &self.current_plan.get(&self.history.focus.children),
             ) {
@@ -305,26 +304,29 @@ impl event::EventHandler for GameState {
                     self.validate_selection();
                 }
             },
-            Keycode::Escape => self.selected.pop(),
+            KeyCode::Escape => self.selected.pop(),
             _ => {}
         }
     }
 
     fn draw(&mut self, ctx: &mut ggez::Context) -> ggez::GameResult<()> {
-        let graphics::Rect { x: x0, y: y0, .. } = graphics::get_screen_coordinates(ctx);
+        let black: Color = (0, 0, 0).into();
+        let white: Color = (255, 255, 255).into();
+        let graphics::Rect { x: x0, y: y0, .. } = graphics::screen_coordinates(ctx);
         let transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
-        graphics::clear(ctx);
-        graphics::set_background_color(ctx, graphics::Color::from_rgb(255, 255, 255));
+        graphics::clear(ctx, white);
         let frame = self.history.get_focus_val();
         render::ecs(ctx, &frame.ecs)?;
-        graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
-        draw_map_grid(ctx)?;
-        graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
+        draw_map_grid(ctx, black)?;
         for (_, player) in frame.players.iter() {
             self.image_map.player.draw(
                 ctx,
-                transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
-                0.,
+                DrawParam::new().dest(
+                    transform
+                        * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
+                            player.position,
+                        ),
+                ),
             )?;
             if let Some(mv) = self
                 .current_plan
@@ -347,39 +349,49 @@ impl event::EventHandler for GameState {
                     Move::Drop(_) => (&self.image_map.drop_icon, 0.),
                 };
                 let dest = transform
-                    * (nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position)
-                        + Vector2::new(0.5, 0.5));
-                image.draw_ex(
+                    * (nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
+                        player.position,
+                    ) + Vector2::new(0.5, 0.5));
+                image.draw(
                     ctx,
-                    graphics::DrawParam {
-                        dest,
-                        offset: Point2::new(0.5, 0.5),
-                        rotation,
-                        ..Default::default()
-                    },
+                    DrawParam::new()
+                        .dest(dest)
+                        .offset([0.5, 0.5])
+                        .rotation(rotation),
                 )?;
             }
             for pt in &self.current_plan.get(&self.history.focus.children).portals {
                 self.image_map.jump_icon.draw(
                     ctx,
-                    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(*pt),
-                    0.,
+                    DrawParam::new().dest(
+                        transform
+                            * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
+                                *pt,
+                            ),
+                    ),
                 )?;
             }
         }
         for (_, portal) in self.history.get_focus_val().portals.iter() {
             self.image_map.portal.draw(
                 ctx,
-                transform
-                    * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(portal.player_position),
-                0.,
+                DrawParam::new().dest(
+                    transform
+                        * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
+                            portal.player_position,
+                        ),
+                ),
             )?;
         }
         for (_, item_drop) in self.history.get_focus_val().items.iter() {
             item_drop.item.image(&self.image_map).draw(
                 ctx,
-                transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(item_drop.position),
-                0.,
+                DrawParam::new().dest(
+                    transform
+                        * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
+                            item_drop.position,
+                        ),
+                ),
             )?;
         }
         match self.selected {
@@ -387,8 +399,10 @@ impl event::EventHandler for GameState {
             Selection::GridCell(pt) => {
                 self.image_map.selection.draw(
                     ctx,
-                    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt),
-                    0.,
+                    DrawParam::new().dest(
+                        transform
+                            * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(pt),
+                    ),
                 )?;
             }
             Selection::Player(player_id) | Selection::WishPicker(player_id, _) => {
@@ -400,8 +414,12 @@ impl event::EventHandler for GameState {
                     .expect("Invalid player selection");
                 self.image_map.selection.draw(
                     ctx,
-                    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(player.position),
-                    0.,
+                    DrawParam::new().dest(
+                        transform
+                            * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
+                                player.position,
+                            ),
+                    ),
                 )?;
             }
             Selection::Inventory(player_id, ref selected_item_option) => {
@@ -425,7 +443,6 @@ impl event::EventHandler for GameState {
                 render_inventory(inventory, ctx, &self.image_map, &None)?;
             }
         }
-        graphics::present(ctx);
-        Ok(())
+        graphics::present(ctx)
     }
 }

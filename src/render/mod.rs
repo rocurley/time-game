@@ -1,46 +1,53 @@
-use self::graphics::{Drawable, Point2};
+use std::default::Default;
+
+use self::graphics::Drawable;
 use super::ggez::graphics;
+use graphics::{DrawParam, Mesh};
 
 use self::nalgebra::{Similarity2, Vector2};
 use super::ggez::nalgebra;
 
 use super::types::*;
 
-pub fn draw_grid(ctx: &mut ggez::Context, bounds: graphics::Rect) -> ggez::GameResult<()> {
+type Point2 = ggez::nalgebra::Point2<f32>;
+
+pub fn draw_grid(
+    ctx: &mut ggez::Context,
+    bounds: graphics::Rect,
+    color: graphics::Color,
+) -> ggez::GameResult<()> {
     let mut x = bounds.x;
     let mut y = bounds.y;
     while x <= bounds.x + bounds.w {
-        graphics::line(
+        Mesh::new_line(
             ctx,
-            &[
-                Point2::new(x, bounds.y - 2.5),
-                Point2::new(x, bounds.y + bounds.h + 2.5),
-            ],
+            &[[x, bounds.y - 2.5], [x, bounds.y + bounds.h + 2.5]],
             5.,
-        )?;
+            color,
+        )?
+        .draw(ctx, DrawParam::default())?;
         x += SCALE;
     }
     while y <= bounds.y + bounds.h {
-        graphics::line(
+        Mesh::new_line(
             ctx,
-            &[
-                Point2::new(bounds.x - 2.5, y),
-                Point2::new(bounds.x + bounds.w + 2.5, y),
-            ],
+            &[[bounds.x - 2.5, y], [bounds.x + bounds.w + 2.5, y]],
             5.,
-        )?;
+            color,
+        )?
+        .draw(ctx, DrawParam::default())?;
         y += SCALE;
     }
     Ok(())
 }
 
-pub fn draw_map_grid(ctx: &mut ggez::Context) -> ggez::GameResult<()> {
-    let bounds = graphics::get_screen_coordinates(ctx);
-    draw_grid(ctx, bounds)
+pub fn draw_map_grid(ctx: &mut ggez::Context, color: graphics::Color) -> ggez::GameResult<()> {
+    let bounds = graphics::screen_coordinates(ctx);
+    draw_grid(ctx, bounds, color)
 }
 
 pub fn inventory_bbox(ctx: &ggez::Context) -> graphics::Rect {
-    let screen_bounds = graphics::get_screen_coordinates(ctx);
+    let screen_bounds = graphics::screen_coordinates(ctx);
     let w = INVENTORY_WIDTH as f32 * SCALE;
     let h = INVENTORY_HEIGHT as f32 * SCALE;
     graphics::Rect {
@@ -78,11 +85,14 @@ pub fn render_inventory(
         Inventory::Actual(_) => graphics::Color::from_rgb(127, 127, 127),
         Inventory::Hypothetical(_) => graphics::Color::from_rgb(127, 127, 255),
     };
-    graphics::set_color(ctx, background)?;
-    graphics::rectangle(ctx, graphics::DrawMode::Fill, bounds)?;
-    graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
-    draw_grid(ctx, bounds)?;
-    graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
+    Mesh::new_rectangle(
+        ctx,
+        graphics::DrawMode::Fill(Default::default()),
+        bounds,
+        background,
+    )?
+    .draw(ctx, DrawParam::new())?;
+    draw_grid(ctx, bounds, (0, 0, 0).into())?;
     for (i, inventory_cell_option) in inventory.cells().iter().enumerate() {
         for inventory_cell in inventory_cell_option.iter() {
             let tile_space_pt = Point::new(
@@ -93,11 +103,12 @@ pub fn render_inventory(
             inventory_cell
                 .item
                 .image(image_map)
-                .draw(ctx, pixel_space_pt, 0.)?;
-            let font = ctx.default_font.clone();
-            let text = graphics::Text::new(ctx, &inventory_cell.count.to_string(), &font)?;
-            graphics::set_color(ctx, graphics::Color::from_rgb(0, 0, 0))?;
-            text.draw(ctx, pixel_space_pt + Vector2::new(5., 5.), 0.0)?;
+                .draw(ctx, DrawParam::new().dest(pixel_space_pt))?;
+            let text = graphics::Text::new(inventory_cell.count.to_string());
+            text.draw(
+                ctx,
+                DrawParam::new().dest(pixel_space_pt + Vector2::new(5., 5.)),
+            )?;
         }
     }
     for &i in selected_item_option {
@@ -106,14 +117,15 @@ pub fn render_inventory(
             i as i32 / INVENTORY_WIDTH as i32,
         );
         let pixel_space_pt = tile_space_to_pixel_space(tile_space_pt, bounds);
-        image_map.selection.draw(ctx, pixel_space_pt, 0.)?;
+        image_map
+            .selection
+            .draw(ctx, DrawParam::new().dest(pixel_space_pt))?;
     }
     Ok(())
 }
 
 pub fn ecs(ctx: &mut ggez::Context, ecs: &ECS) -> ggez::GameResult<()> {
-    graphics::set_color(ctx, graphics::Color::from_rgb(255, 255, 255))?;
-    let bounds = graphics::get_screen_coordinates(ctx);
+    let bounds = graphics::screen_coordinates(ctx);
     for (entity, image) in ecs.images.iter() {
         if !ecs.entities.contains_key(entity) {
             continue;
@@ -123,7 +135,7 @@ pub fn ecs(ctx: &mut ggez::Context, ecs: &ECS) -> ggez::GameResult<()> {
             None => continue,
         };
         let pixel_space_pt = tile_space_to_pixel_space(pt, bounds);
-        image.draw(ctx, pixel_space_pt, 0.)?;
+        image.draw(ctx, DrawParam::new().dest(pixel_space_pt))?;
     }
     Ok(())
 }
