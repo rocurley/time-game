@@ -10,120 +10,143 @@ use crate::{
         ItemPortalGraphNode, PlayerPortalGraphNode,
     },
     types::{
-        Action, Direction, DoubleMap, EventTrigger, EventTriggerModifier, GameError,
-        HypotheticalInventory, Inventory, ItemDrop, Move, Plan, Player, Portal,
+        player_at, Action, Direction, Entity, EventTrigger, EventTriggerModifier, GameError,
+        HypotheticalInventory, ImageMap, Inventory, ItemDrop, Move, Plan, Portal,
     },
 };
 use enum_map::EnumMap;
 use enumset::EnumSet;
 use ggez::nalgebra;
-use std::{cmp::min, iter, ops::DerefMut};
+use std::{cmp::min, iter};
 
-pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, GameError> {
-    let mut portals = initial_frame.portals.clone();
-    let mut player_portal_graph = initial_frame.player_portal_graph.clone();
-    let mut item_portal_graphs = initial_frame.item_portal_graphs.clone();
-    let mut items = initial_frame.items.clone();
-    let mut players = DoubleMap::new();
-    let mut ecs = initial_frame.ecs.clone();
-    let mut jumpers: Vec<Player> = Vec::new();
-    for (_, old_player) in initial_frame.players.iter() {
-        match plan.moves.get(&old_player.id) {
-            None => {
-                players.insert(old_player.clone())?;
-            }
-            Some(&Move::Direction(ref direction)) => {
-                let mut player: Player = old_player.clone();
+pub fn apply_plan(
+    image_map: &ImageMap,
+    initial_frame: &GameFrame,
+    plan: &Plan,
+) -> Result<GameFrame, GameError> {
+    let mut out = initial_frame.clone();
+    // TODO: we need to figure out if we're mutating step-by-step and then validating or clearing
+    // and then inserting as we go, like we used to. I think mutating step-by-step and validating
+    // probably makes the most sense, since we can't clear the ECS of players nearly as easly.
+    // Hopefully this will result in a cleaner solution as well: this has always been one of the
+    // gnarliest parts of the codebase.
+    let mut jumpers: Vec<Entity> = Vec::new();
+    for (&entity, mv) in plan.moves.iter() {
+        match mv {
+            Move::Direction(ref direction) => {
+                let position = out
+                    .ecs
+                    .positions
+                    .get_mut(entity)
+                    .expect("Attempted to move entity with no position");
                 let delta: nalgebra::Vector2<i32> = match *direction {
                     Direction::Up => -nalgebra::Vector2::y(),
                     Direction::Down => nalgebra::Vector2::y(),
                     Direction::Left => -nalgebra::Vector2::x(),
                     Direction::Right => nalgebra::Vector2::x(),
                 };
-                player.position += delta;
-
-                players.insert(player)?;
+                *position += delta;
             }
-            Some(&Move::Jump) => {
+            Move::Jump => {
                 // We can't do everything right now, because we need to wait for all the players to
                 // exist in the new game frame. To make thing simple, we'll wait to do anything at
                 // all.
-                jumpers.push(old_player.clone());
+                jumpers.push(entity);
             }
-            Some(&Move::PickUp) => {
-                let mut player: Player = old_player.clone();
-                let item_drop = items
-                    .remove_by_position(&player.position)
+            Move::PickUp => {
+                let inventory = out
+                    .ecs
+                    .players
+                    .get_mut(entity)
+                    .expect("Entity with no inventory attempted to pick up");
+                let position = out
+                    .ecs
+                    .positions
+                    .get(entity)
+                    .expect("Entity with no position attempted to pick up");
+                let item_drop = out
+                    .items
+                    .remove_by_position(position)
                     .ok_or("Couln't pick up: no item")?;
                 let item = item_drop.item;
-                let prior_item_count = player.inventory.count_items().get(&item).map_or(0, |x| *x);
-                let item_portal_graph = item_portal_graphs
+                let prior_item_count = inventory.count_items().get(&item).map_or(0, |x| *x);
+                let item_portal_graph = out
+                    .item_portal_graphs
                     .entry(item.clone())
                     .or_insert_with(GraphMap::new);
-                let old_held_ix = find_latest_held_index(item_portal_graph, player.id).unwrap_or(0);
+                let old_held_ix = find_latest_held_index(item_portal_graph, entity).unwrap_or(0);
                 let new_held_ix = old_held_ix + 1;
                 item_portal_graph.add_edge(
                     ItemPortalGraphNode::Dropped(item_drop.id),
-                    ItemPortalGraphNode::Held(player.id, new_held_ix),
+                    ItemPortalGraphNode::Held(entity, new_held_ix),
                     1,
                 );
                 item_portal_graph.add_edge(
-                    ItemPortalGraphNode::Held(player.id, old_held_ix),
-                    ItemPortalGraphNode::Held(player.id, new_held_ix),
+                    ItemPortalGraphNode::Held(entity, old_held_ix),
+                    ItemPortalGraphNode::Held(entity, new_held_ix),
                     prior_item_count,
                 );
-                player.inventory.insert(&item)?;
-                players.insert(player)?;
+                inventory.insert(&item)?;
             }
-            Some(&Move::Drop(item_ix)) => {
-                let mut player: Player = old_player.clone();
-                let item = player.inventory.drop(item_ix)?;
-                let remaining_item_count =
-                    player.inventory.count_items().get(&item).map_or(0, |x| *x);
-                let item_drop = ItemDrop::new(item.clone(), player.position);
-                let player_id = player.id;
+            Move::Drop(item_ix) => {
+                let inventory = out
+                    .ecs
+                    .players
+                    .get_mut(entity)
+                    .expect("Entity with no inventory attempted to drop");
+                let position = *out
+                    .ecs
+                    .positions
+                    .get(entity)
+                    .expect("Entity with no position attempted to drop");
+                let item = inventory.drop(*item_ix)?;
+                let remaining_item_count = inventory.count_items().get(&item).map_or(0, |x| *x);
+                let item_drop = ItemDrop::new(item.clone(), position);
                 let item_drop_id = item_drop.id;
-                items.insert(item_drop)?;
-                players.insert(player)?;
-                let item_portal_graph = item_portal_graphs
+                out.items.insert(item_drop)?;
+                let item_portal_graph = out
+                    .item_portal_graphs
                     .entry(item.clone())
                     .or_insert_with(GraphMap::new);
                 let latest_held_index =
-                    find_latest_held_index(item_portal_graph, player_id).unwrap_or(0);
-                let latest_held = ItemPortalGraphNode::Held(player_id, latest_held_index);
+                    find_latest_held_index(item_portal_graph, entity).unwrap_or(0);
+                let latest_held = ItemPortalGraphNode::Held(entity, latest_held_index);
                 item_portal_graph.add_edge(
                     latest_held,
                     ItemPortalGraphNode::Dropped(item_drop_id),
                     1,
                 );
-                let next_held = ItemPortalGraphNode::Held(player_id, latest_held_index + 1);
+                let next_held = ItemPortalGraphNode::Held(entity, latest_held_index + 1);
                 item_portal_graph.add_edge(latest_held, next_held, remaining_item_count);
             }
         }
     }
-    for pos in plan.portals.iter() {
-        let mut player = Player::new(*pos);
-        player.inventory = Inventory::Hypothetical(HypotheticalInventory::new());
-        let player_id = player.id;
-        players.insert(player)?;
-        let portal = Portal::new(0, *pos);
+    for &pos in plan.portals.iter() {
+        let inventory = Inventory::Hypothetical(HypotheticalInventory::new());
+        let player = out.ecs.insert_player(image_map, pos, inventory);
+        let portal = Portal::new(0, pos);
         let portal_id = portal.id;
-        portals.insert(portal)?;
-        player_portal_graph.add_edge(
+        out.portals.insert(portal)?;
+        out.player_portal_graph.add_edge(
             PlayerPortalGraphNode::Portal(portal_id),
             PlayerPortalGraphNode::End,
-            player_id,
+            player,
         );
     }
 
-    let mut event_listeners = ecs
-        .event_listeners
+    // This is pretty stupid. We want to have out.ecs.event_listeners borrowed mutably while
+    // manipulating the rest of the ecs member variables. To convince rust that this is safe, we
+    // swap the event listeners into a separate variable, and swap it back when we're done.
+    let mut event_listeners = Default::default();
+    std::mem::swap(&mut event_listeners, &mut out.ecs.event_listeners);
+    let mut event_listeners_sorted = event_listeners
         .iter_mut()
         .flat_map(|(entity, listeners)| listeners.iter_mut().map(move |event| (entity, event)))
         .collect::<Vec<_>>();
-    event_listeners.sort_by_key(|(_, listener)| listener.priority);
-    for (entity, event_listener) in event_listeners {
-        let disabled = ecs
+    event_listeners_sorted.sort_by_key(|(_, listener)| listener.priority);
+    for (entity, event_listener) in event_listeners_sorted {
+        let disabled = out
+            .ecs
             .disabled_event_groups
             .get(entity)
             .map_or(false, |disabled| disabled.contains(event_listener.group));
@@ -131,31 +154,37 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
             continue;
         }
         let base_triggered = match &event_listener.trigger {
-            EventTrigger::PlayerIntersect => ecs
+            EventTrigger::PlayerIntersect => out
+                .ecs
                 .positions
                 .get(entity)
-                .and_then(|pos| players.id_by_position(pos))
+                .and_then(|&pos| player_at(&out.ecs, pos))
                 .is_some(),
-            EventTrigger::PlayerNotIntersect => ecs
+            EventTrigger::PlayerNotIntersect => out
+                .ecs
                 .positions
                 .get(entity)
-                .map(|pos| players.id_by_position(pos).is_none())
+                .map(|&pos| player_at(&out.ecs, pos).is_none())
                 .unwrap_or(false),
-            EventTrigger::PlayerIntersectHasItems(item, required_count) => ecs
+            EventTrigger::PlayerIntersectHasItems(item, required_count) => out
+                .ecs
                 .positions
                 .get(entity)
-                .and_then(|pos| players.get_by_position(pos))
-                .and_then(|player| player.inventory.count_items().get(&item).copied())
+                .and_then(|&pos| player_at(&out.ecs, pos))
+                .and_then(|player| out.ecs.players.get(player))
+                .and_then(|inventory| inventory.count_items().get(&item).copied())
                 .filter(|c| c >= required_count)
                 .is_some(),
-            EventTrigger::ItemIntersect(item) => ecs
+            EventTrigger::ItemIntersect(item) => out
+                .ecs
                 .positions
                 .get(entity)
-                .and_then(|pos| items.get_by_position(pos))
+                .and_then(|pos| out.items.get_by_position(pos))
                 .filter(|drop| drop.item == *item)
                 .is_some(),
             EventTrigger::CounterPredicate(counter, p) => {
-                let count = ecs
+                let count = out
+                    .ecs
                     .counters
                     .get(entity)
                     .map_or(0, |counters| counters[*counter]);
@@ -185,54 +214,54 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
         while let Some(action) = actions.pop() {
             match action {
                 Action::AlterCounter(target, counter, f) => {
-                    if !ecs.counters.contains_key(*target) {
-                        ecs.counters.insert(*target, EnumMap::new());
+                    if !out.ecs.counters.contains_key(*target) {
+                        out.ecs.counters.insert(*target, EnumMap::new());
                     }
-                    let counters = ecs
+                    let counters = out
+                        .ecs
                         .counters
                         .get_mut(*target)
                         .expect("Should have ensured that the counters existed");
                     counters[*counter] = f(counters[*counter]);
                 }
                 Action::PlayerMarkUsed(item, count) => {
-                    let player_id_option = ecs
+                    let player_option = out
+                        .ecs
                         .positions
                         .get(entity)
-                        .and_then(|pos| players.id_by_position(pos));
-                    if let Some(player_id) = player_id_option {
-                        let mut player = players
-                            .get_mut_by_id(player_id)
-                            .expect("Failed to re-borrow player");
-                        let item_count = player
-                            .inventory
-                            .count_items()
-                            .get(item)
-                            .copied()
-                            .unwrap_or(0);
+                        .and_then(|&pos| player_at(&out.ecs, pos));
+                    if let Some(player) = player_option {
+                        let inventory = out
+                            .ecs
+                            .players
+                            .get_mut(player)
+                            .expect("Player has no inventory");
+                        let item_count = inventory.count_items().get(item).copied().unwrap_or(0);
                         if item_count < *count {
                             panic!("Not enough items for PlayerMarkUsed")
                         }
-                        if let Inventory::Hypothetical(ref mut inventory) = player.inventory {
+                        if let Inventory::Hypothetical(ref mut inventory) = inventory {
                             let minimum = inventory.minima.entry(item.clone()).or_insert(0);
                             *minimum = min(count - 1, *minimum);
                         }
                     };
                 }
                 Action::SetImage { target, img } => {
-                    ecs.images.insert(*target, img.clone());
+                    out.ecs.images.insert(*target, img.clone());
                 }
                 Action::EnableGroup(target, group) => {
-                    if let Some(disabled_groups) = ecs.disabled_event_groups.get_mut(*target) {
+                    if let Some(disabled_groups) = out.ecs.disabled_event_groups.get_mut(*target) {
                         disabled_groups.remove(*group);
                     }
                 }
                 Action::DisableGroup(target, group) => {
-                    match ecs.disabled_event_groups.get_mut(*target) {
+                    match out.ecs.disabled_event_groups.get_mut(*target) {
                         Some(disabled_groups) => {
                             disabled_groups.insert(*group);
                         }
                         None => {
-                            ecs.disabled_event_groups
+                            out.ecs
+                                .disabled_event_groups
                                 .insert(*target, EnumSet::only(*group));
                         }
                     }
@@ -244,104 +273,101 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
             }
         }
     }
+    std::mem::swap(&mut event_listeners, &mut out.ecs.event_listeners);
 
     while let Some(prior_player) = jumpers.pop() {
-        // Note that prior_player has not been inserted into players, nor will it be.
         // First, we remove the portal.
-        let portal = portals
-            .remove_by_position(&prior_player.position)
+        let prior_player_position = out
+            .ecs
+            .positions
+            .get(prior_player)
+            .expect("Player without position");
+        let portal = out
+            .portals
+            .remove_by_position(&prior_player_position)
             .ok_or("Tried to close loop at wrong position")?;
         // Next, we find the player we're merging into: "post_player"
         let mut last_edge = None;
         visit::depth_first_search(
-            &player_portal_graph,
+            &out.player_portal_graph,
             iter::once(PlayerPortalGraphNode::Portal(portal.id)),
             |e| {
                 if let visit::DfsEvent::TreeEdge(n1, n2) = e {
-                    last_edge = player_portal_graph.edge_weight(n1, n2);
+                    last_edge = out.player_portal_graph.edge_weight(n1, n2);
                 }
             },
         );
-        let post_player_id = *last_edge.expect("No outgoing edges for closed portal");
-        if post_player_id == prior_player.id {
+        let post_player = *last_edge.expect("No outgoing edges for closed portal");
+        if post_player == prior_player {
             Err("Attempted to jump into self")?;
         }
-        // There are 3 possibilities here:
-        // * The post_player didn't jump: they're in players.
-        // * The post_player did jump, and they've already been processed (possibly many frames
-        // ago). In that case, we want to follow the player_portal_graph, and figure out what
-        // they're called now.
-        // * The post_player did jump, and they haven't been processed. In that case, they're
-        // somewhere in the rest of jumpers.
-        //
-        // We handle the first two cases together, and the last one by searching through jumpers.
-        let mut post_player_ref_wrapper = players.get_mut_by_id(post_player_id);
-        let post_player = post_player_ref_wrapper.as_mut().map_or_else(
-            || {
-                for post_player in jumpers.iter_mut() {
-                    if post_player.id == post_player_id {
-                        return post_player;
-                    }
-                }
-                panic!("Couldn't find post_player in players or jumpers");
-            },
-            |r| r.deref_mut(),
-        );
         // Merge the inventories
-        let post_inventory = match post_player.inventory {
+        let prior_inventory = out
+            .ecs
+            .players
+            .get(prior_player)
+            .expect("prior_player is not a player")
+            .clone();
+        let post_inventory = out
+            .ecs
+            .players
+            .get_mut(post_player)
+            .expect("post_player is not a player");
+        let post_inventory_hypothetical = match post_inventory {
             Inventory::Actual(_) => panic!("Merged into an actual inventory"),
             Inventory::Hypothetical(ref inventory) => inventory,
         };
-        let (new_post_inventory, wishes) =
-            post_inventory.merge_in(prior_player.inventory.clone())?;
-        (*post_player).inventory = new_post_inventory;
+        let mut item_counts = prior_inventory.count_items();
+        let (new_post_inventory, wishes) = post_inventory_hypothetical.merge_in(prior_inventory)?;
+        *post_inventory = new_post_inventory;
         dbg!(&wishes);
         // Propegate the merge-implied wishes to the item graph. We need to do this before
         // modifying the players portal graph, or before adding the new edge to the item portal
         // graphs. Conceptually, wishing and unwishing happens _before_ the portal closes, to make
         // it valid to close the portal.
-        let mut item_counts = prior_player.inventory.count_items();
         for wish in wishes {
             let item_count = item_counts.entry(wish.item.clone()).or_insert(0);
             *item_count = (*item_count as i32 + wish.prior_count) as usize;
-            let item_portal_graph = item_portal_graphs
+            let item_portal_graph = out
+                .item_portal_graphs
                 .get_mut(&wish.item)
                 .expect("no item portal graph for existant item");
             println!("Before wishing");
             render_item_graph(item_portal_graph);
             signed_wish(
                 item_portal_graph,
-                &player_portal_graph,
-                prior_player.id,
+                &out.player_portal_graph,
+                prior_player,
                 wish.prior_count,
             );
             println!("After prior wishing");
             render_item_graph(item_portal_graph);
             signed_wish(
                 item_portal_graph,
-                &player_portal_graph,
-                post_player_id,
+                &out.player_portal_graph,
+                post_player,
                 wish.post_count,
             );
             println!("After post wishing");
             render_item_graph(item_portal_graph);
         }
         // Disconnect the player edge from end and connect it to the portal jumped into.
-        let (player_origin, _, _) = player_portal_graph
+        let (player_origin, _, _) = out
+            .player_portal_graph
             .all_edges()
-            .find(|(_, _, &edge)| edge == prior_player.id)
+            .find(|(_, _, &edge)| edge == prior_player)
             .expect("Couldn't find player in portal graph");
-        player_portal_graph
+        out.player_portal_graph
             .remove_edge(player_origin, PlayerPortalGraphNode::End)
             .expect("Tried to close portal when edge unconnected to End");
-        player_portal_graph.add_edge(
+        out.player_portal_graph.add_edge(
             player_origin,
             PlayerPortalGraphNode::Portal(portal.id),
-            prior_player.id,
+            prior_player,
         );
         // Check that the player can still reach end (no loops)
         if !petgraph::algo::has_path_connecting(
-            &player_portal_graph,
+            &out.player_portal_graph,
             PlayerPortalGraphNode::Portal(portal.id),
             PlayerPortalGraphNode::End,
             None,
@@ -349,12 +375,12 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
             Err("Created infinite loop")?;
         }
         // Add the edge linking prior and post players to the item portal graph
-        dbg!(&post_player.inventory);
-        for (item, item_portal_graph) in item_portal_graphs.iter_mut() {
-            if let Some(origin_node) = find_latest_held(item_portal_graph, prior_player.id) {
+        dbg!(post_inventory);
+        for (item, item_portal_graph) in out.item_portal_graphs.iter_mut() {
+            if let Some(origin_node) = find_latest_held(item_portal_graph, prior_player) {
                 item_portal_graph.add_edge(
                     origin_node,
-                    ItemPortalGraphNode::Held(post_player_id, 0),
+                    ItemPortalGraphNode::Held(post_player, 0),
                     item_counts.get(item).copied().unwrap_or(0),
                 );
             }
@@ -371,8 +397,8 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
         // unable to reach a sink. This means that if we can connect the jump node to a
         // sink, we're good to go.
 
-        for (item, item_portal_graph) in item_portal_graphs.iter_mut() {
-            if let Some(origin_node) = find_latest_held(item_portal_graph, prior_player.id) {
+        for (item, item_portal_graph) in out.item_portal_graphs.iter_mut() {
+            if let Some(origin_node) = find_latest_held(item_portal_graph, prior_player) {
                 let filtered =
                     visit::EdgeFiltered::from_fn(&*item_portal_graph, |(_, _, &w)| w != 0);
                 let mut dfs = visit::Dfs::new(&filtered, origin_node);
@@ -389,15 +415,10 @@ pub fn apply_plan(initial_frame: &GameFrame, plan: &Plan) -> Result<GameFrame, G
                 }
             }
         }
+        // Finally, remove prior_player from the ecs.
+        out.ecs.entities.remove(prior_player);
     }
-    Ok(GameFrame {
-        players,
-        portals,
-        items,
-        player_portal_graph,
-        item_portal_graphs,
-        ecs,
-    })
+    Ok(out)
 }
 #[cfg(test)]
 mod test;

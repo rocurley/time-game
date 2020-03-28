@@ -32,7 +32,7 @@ pub fn main() {
     let game_state = &mut GameState::new(ctx).unwrap();
     let game_frame = game_state.history.get_focus_val_mut();
     game_frame
-        .insert_player(Player::new(Point2::new(0, 4)))
+        .insert_player(&game_state.image_map, Point2::new(0, 4))
         .expect("Could not insert player");
     game_frame
         .insert_item_drop(ItemDrop::new(Item::Key(Key {}), Point2::new(1, 1)), 1)

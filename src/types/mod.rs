@@ -218,11 +218,11 @@ impl DoubleMappable for ItemDrop {
 #[derive(PartialEq, Eq)]
 pub enum Selection {
     Top,
-    Player(Id<Player>),
+    Player(Entity),
     GridCell(Point),
-    Inventory(Id<Player>, Option<usize>),
-    WishPicker(Id<Player>, usize),
-    WishPickerInventoryViewer(Id<Player>, usize, Id<Player>),
+    Inventory(Entity, Option<usize>),
+    WishPicker(Entity, usize),
+    WishPickerInventoryViewer(Entity, usize, Entity),
 }
 
 impl Selection {
@@ -242,40 +242,45 @@ impl Selection {
 }
 
 pub struct ImageMap {
-    pub player: graphics::Image,
-    pub selection: graphics::Image,
-    pub move_arrow: graphics::Image,
-    pub jump_icon: graphics::Image,
-    pub pick_up_icon: graphics::Image,
-    pub drop_icon: graphics::Image,
-    pub portal: graphics::Image,
-    pub key: graphics::Image,
-    pub wall: graphics::Image,
-    pub open_door: graphics::Image,
-    pub closed_door: graphics::Image,
-    pub plate: graphics::Image,
-    pub lights: [graphics::Image; 4],
+    pub player: DrawRef,
+    pub selection: DrawRef,
+    pub move_arrow: DrawRef,
+    pub jump_icon: DrawRef,
+    pub pick_up_icon: DrawRef,
+    pub drop_icon: DrawRef,
+    pub portal: DrawRef,
+    pub key: DrawRef,
+    pub wall: DrawRef,
+    pub open_door: DrawRef,
+    pub closed_door: DrawRef,
+    pub plate: DrawRef,
+    pub lights: [DrawRef; 4],
+}
+
+fn load_image(ctx: &mut ggez::Context, path: &str) -> ggez::GameResult<DrawRef> {
+    let image = graphics::Image::new(ctx, path)?;
+    Ok(Box::leak(Box::new(image)))
 }
 
 impl ImageMap {
     pub fn new(ctx: &mut ggez::Context) -> ggez::GameResult<Self> {
-        let player = graphics::Image::new(ctx, "/images/player.png")?;
-        let selection = graphics::Image::new(ctx, "/images/selection.png")?;
-        let move_arrow = graphics::Image::new(ctx, "/images/arrow.png")?;
-        let jump_icon = graphics::Image::new(ctx, "/images/jump.png")?;
-        let pick_up_icon = graphics::Image::new(ctx, "/images/pick_up.png")?;
-        let drop_icon = graphics::Image::new(ctx, "/images/drop.png")?;
-        let portal = graphics::Image::new(ctx, "/images/portal.png")?;
-        let key = graphics::Image::new(ctx, "/images/key.png")?;
-        let wall = graphics::Image::new(ctx, "/images/wall.png")?;
-        let open_door = graphics::Image::new(ctx, "/images/open_door.png")?;
-        let closed_door = graphics::Image::new(ctx, "/images/closed_door.png")?;
-        let plate = graphics::Image::new(ctx, "/images/plate.png")?;
+        let player = load_image(ctx, "/images/player.png")?;
+        let selection = load_image(ctx, "/images/selection.png")?;
+        let move_arrow = load_image(ctx, "/images/arrow.png")?;
+        let jump_icon = load_image(ctx, "/images/jump.png")?;
+        let pick_up_icon = load_image(ctx, "/images/pick_up.png")?;
+        let drop_icon = load_image(ctx, "/images/drop.png")?;
+        let portal = load_image(ctx, "/images/portal.png")?;
+        let key = load_image(ctx, "/images/key.png")?;
+        let wall = load_image(ctx, "/images/wall.png")?;
+        let open_door = load_image(ctx, "/images/open_door.png")?;
+        let closed_door = load_image(ctx, "/images/closed_door.png")?;
+        let plate = load_image(ctx, "/images/plate.png")?;
         let lights = [
-            graphics::Image::new(ctx, "/images/lights0.png")?,
-            graphics::Image::new(ctx, "/images/lights1.png")?,
-            graphics::Image::new(ctx, "/images/lights2.png")?,
-            graphics::Image::new(ctx, "/images/lights3.png")?,
+            load_image(ctx, "/images/lights0.png")?,
+            load_image(ctx, "/images/lights1.png")?,
+            load_image(ctx, "/images/lights2.png")?,
+            load_image(ctx, "/images/lights3.png")?,
         ];
         Ok(ImageMap {
             player,
@@ -330,7 +335,7 @@ pub enum Move {
 
 #[derive(Clone, Debug, Default)]
 pub struct Plan {
-    pub moves: HashMap<Id<Player>, Move>,
+    pub moves: HashMap<Entity, Move>,
     pub portals: HashSet<Point>,
 }
 
@@ -431,7 +436,7 @@ impl HypotheticalInventory {
             }
         }
         *self.minima.entry(item.clone()).or_insert(0) += 1;
-        *self.constraints.entry(item.clone()).or_insert(0) += 1;
+        *self.constraints.entry(item).or_insert(0) += 1;
         Ok(())
     }
     pub fn unwish(&mut self, ix: usize) -> Result<(), &'static str> {
@@ -788,7 +793,7 @@ pub enum Item {
 }
 
 impl Item {
-    pub fn image<'a>(&self, image_map: &'a ImageMap) -> &'a graphics::Image {
+    pub fn image(&self, image_map: &ImageMap) -> DrawRef {
         match *self {
             Item::Key(ref key) => key.image(image_map),
         }
@@ -799,8 +804,8 @@ impl Item {
 pub struct Key {}
 
 impl Key {
-    pub fn image<'a>(&self, image_map: &'a ImageMap) -> &'a graphics::Image {
-        &image_map.key
+    pub fn image(&self, image_map: &ImageMap) -> DrawRef {
+        image_map.key
     }
 }
 
@@ -835,14 +840,14 @@ pub enum MapElement {
     },
 }
 impl MapElement {
-    pub fn image<'im>(&self, image_map: &'im ImageMap) -> Option<&'im graphics::Image> {
+    pub fn image(&self, image_map: &ImageMap) -> Option<DrawRef> {
         match self {
             MapElement::Empty => None,
-            MapElement::Wall => Some(&image_map.wall),
-            MapElement::ClosedDoor | MapElement::RemoteDoor => Some(&image_map.closed_door),
-            MapElement::OpenDoor => Some(&image_map.open_door),
-            MapElement::Plate(_, _) => Some(&image_map.plate),
-            MapElement::Light { .. } => Some(&image_map.lights[0]),
+            MapElement::Wall => Some(image_map.wall),
+            MapElement::ClosedDoor | MapElement::RemoteDoor => Some(image_map.closed_door),
+            MapElement::OpenDoor => Some(image_map.open_door),
+            MapElement::Plate(_, _) => Some(image_map.plate),
+            MapElement::Light { .. } => Some(image_map.lights[0]),
         }
     }
     pub fn passable(&self) -> bool {
@@ -859,7 +864,7 @@ impl MapElement {
     pub fn add(&self, image_map: &ImageMap, pt: Point, ecs: &mut ECS) -> Entity {
         let e = ecs.entities.insert(());
         if let Some(image) = self.image(image_map) {
-            ecs.images.insert(e, image.clone());
+            ecs.images.insert(e, image);
         }
         ecs.positions.insert(e, pt);
         let mut event_listeners = Vec::new();
@@ -872,7 +877,7 @@ impl MapElement {
                             Action::PlayerMarkUsed(Item::Key(Key {}), 1),
                             Action::SetImage {
                                 target: e,
-                                img: image_map.open_door.clone(),
+                                img: image_map.open_door,
                             },
                             Action::DisableGroup(e, Group::Locked),
                         ]),
@@ -983,14 +988,36 @@ pub type Components<T> = SecondaryMap<Entity, T>;
 pub type SparseComponents<T> = SparseSecondaryMap<Entity, T>;
 #[derive(Clone, Debug, Default)]
 pub struct ECS {
+    // TODO: leak ImageMap at launch, then stick a reference to it in every ECS so an ECS can
+    // insert things itself.
     pub entities: HopSlotMap<Entity, ()>,
-    // a graphics::Image is just an ARC pointer, copying is cheap.
-    pub images: Components<graphics::Image>,
+    pub images: Components<DrawRef>,
     pub positions: Components<Point>,
     pub event_listeners: Components<Vec<EventListener>>,
     pub disabled_event_groups: Components<EnumSet<Group>>,
     pub counters: Components<EnumMap<Counter, i64>>,
+    pub players: Components<Inventory>,
 }
+
+impl ECS {
+    pub fn insert_player(
+        &mut self,
+        image_map: &ImageMap,
+        pos: Point,
+        inventory: Inventory,
+    ) -> Entity {
+        let player = self.entities.insert(());
+        self.players.insert(player, inventory);
+        self.positions.insert(player, pos);
+        self.images.insert(player, image_map.player.clone());
+        player
+    }
+}
+
+pub trait DrawDebug: graphics::Drawable + std::fmt::Debug {}
+impl<T> DrawDebug for T where T: graphics::Drawable + std::fmt::Debug {}
+
+pub type DrawRef = &'static dyn DrawDebug;
 
 pub trait CloneFn<A, B>: objekt::Clone + Fn(A) -> B {}
 objekt::clone_trait_object!(<A,B>CloneFn<A,B>);
@@ -1028,7 +1055,7 @@ pub enum Action {
     Reject(&'static str),
     SetImage {
         target: Entity,
-        img: graphics::Image,
+        img: DrawRef,
     },
     EnableGroup(Entity, Group),
     DisableGroup(Entity, Group),
@@ -1099,6 +1126,14 @@ pub fn entities_at(ecs: &ECS, pt: Point) -> Vec<Entity> {
             }
         })
         .collect()
+}
+
+pub fn player_at(ecs: &ECS, pt: Point) -> Option<Entity> {
+    let entities = entities_at(ecs, pt);
+    entities
+        .into_iter()
+        .filter(|e| ecs.players.contains_key(*e))
+        .next()
 }
 
 #[cfg(test)]

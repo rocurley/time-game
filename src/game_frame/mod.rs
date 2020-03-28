@@ -2,14 +2,16 @@ use crate::{
     portal_graph::{
         self, ItemPortalGraph, ItemPortalGraphNode, PlayerPortalGraph, PlayerPortalGraphNode,
     },
-    types::{DoubleMap, GameError, Id, Inventory, Item, ItemDrop, Player, Portal, ECS},
+    types::{
+        ActualInventory, DoubleMap, Entity, GameError, Id, ImageMap, Inventory, Item, ItemDrop,
+        Player, Point, Portal, ECS,
+    },
 };
 use petgraph::graphmap::GraphMap;
 use std::{collections::HashMap, fmt};
 
 #[derive(Clone)]
 pub struct GameFrame {
-    pub players: DoubleMap<Player>,
     pub portals: DoubleMap<Portal>,
     pub items: DoubleMap<ItemDrop>,
     pub player_portal_graph: PlayerPortalGraph,
@@ -20,8 +22,8 @@ impl fmt::Debug for GameFrame {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "GameFrame{{ players:{:?}, portals:{:?}, items:{:?}, portal_graph:???}}",
-            self.players, self.portals, self.items
+            "GameFrame{{ portals:{:?}, items:{:?}, portal_graph:???}}",
+            self.portals, self.items
         )
     }
 }
@@ -35,7 +37,6 @@ impl Default for GameFrame {
 impl GameFrame {
     pub fn new() -> Self {
         GameFrame {
-            players: DoubleMap::new(),
             portals: DoubleMap::new(),
             items: DoubleMap::new(),
             player_portal_graph: GraphMap::new(),
@@ -60,28 +61,34 @@ impl GameFrame {
         self.items.insert(drop)?;
         Ok(())
     }
-    pub fn insert_player(&mut self, player: Player) -> Result<(), GameError> {
+    pub fn insert_player(
+        &mut self,
+        image_map: &ImageMap,
+        position: Point,
+    ) -> Result<Entity, GameError> {
+        let inventory = Inventory::Actual(ActualInventory::new());
+        let player = self.ecs.insert_player(image_map, position, inventory);
         self.player_portal_graph.add_edge(
             PlayerPortalGraphNode::Beginning,
             PlayerPortalGraphNode::End,
-            player.id,
+            player,
         );
-        self.players.insert(player)?;
-        Ok(())
+        Ok(player)
     }
     pub fn wish(
         &mut self,
-        player_id: Id<Player>,
+        player: Entity,
         ix: usize,
         clicked_item: Option<Item>,
     ) -> FrameWishResult {
-        let players = &mut self.players;
         let item_portal_graphs = &mut self.item_portal_graphs;
         let player_portal_graph = &self.player_portal_graph;
-        let mut player = players
-            .get_mut_by_id(player_id)
-            .expect("Couldn't find player in players");
-        if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory {
+        let inventory = self
+            .ecs
+            .players
+            .get_mut(player)
+            .expect("Player lacks an inventory");
+        if let Inventory::Hypothetical(ref mut hypothetical) = inventory {
             let item = match (clicked_item, &hypothetical.cells[ix]) {
                 (None, None) => {
                     return FrameWishResult::NoItem;
@@ -94,29 +101,26 @@ impl GameFrame {
             hypothetical
                 .wish(item, ix)
                 .expect("Couldn't find player in players");
-            portal_graph::wish(item_portal_graph, player_portal_graph, player_id, 1);
+            portal_graph::wish(item_portal_graph, player_portal_graph, player, 1);
         }
         FrameWishResult::Success
     }
-    pub fn unwish(
-        &mut self,
-        player_id: Id<Player>,
-        ix: usize,
-    ) -> Result<FrameWishResult, GameError> {
-        let players = &mut self.players;
+    pub fn unwish(&mut self, player: Entity, ix: usize) -> Result<FrameWishResult, GameError> {
         let item_portal_graphs = &mut self.item_portal_graphs;
         let player_portal_graph = &self.player_portal_graph;
-        let mut player = players
-            .get_mut_by_id(player_id)
-            .expect("Couldn't find player in players");
-        if let Inventory::Hypothetical(ref mut hypothetical) = player.inventory {
+        let inventory = self
+            .ecs
+            .players
+            .get_mut(player)
+            .expect("Player lacks an inventory");
+        if let Inventory::Hypothetical(ref mut hypothetical) = inventory {
             let item = match hypothetical.cells[ix] {
                 None => return Ok(FrameWishResult::NoItem),
                 Some(ref cell) => cell.item.clone(),
             };
             let item_portal_graph = item_portal_graphs.entry(item.clone()).or_default();
             hypothetical.unwish(ix)?;
-            portal_graph::unwish(item_portal_graph, player_portal_graph, player_id, 1);
+            portal_graph::unwish(item_portal_graph, player_portal_graph, player, 1);
         }
         Ok(FrameWishResult::Success)
     }

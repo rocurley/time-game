@@ -51,23 +51,25 @@ impl GameState {
         match self.selected {
             Selection::Top => {}
             Selection::GridCell(pt) => {
-                if let Some(player_id) = self.history.get_focus_val().players.id_by_position(&pt) {
-                    self.selected = Selection::Player(player_id);
+                let ecs = &self.history.get_focus_val().ecs;
+                if let Some(player) = player_at(ecs, pt) {
+                    self.selected = Selection::Player(player);
                 }
             }
             Selection::WishPicker(player_id, _)
             | Selection::Inventory(player_id, _)
             | Selection::Player(player_id) => {
-                if !self.history.get_focus_val().players.contains_id(&player_id) {
+                let ecs = &self.history.get_focus_val().ecs;
+                if !ecs.players.contains_key(player_id) {
                     self.selected = Selection::Top;
                 }
             }
             Selection::WishPickerInventoryViewer(player_id, ix, target_player_id) => {
-                let players = &self.history.get_focus_val().players;
-                if !players.contains_id(&player_id) {
+                let ecs = &self.history.get_focus_val().ecs;
+                if !ecs.players.contains_key(player_id) {
                     self.selected = Selection::Top;
                 }
-                if !players.contains_id(&target_player_id) {
+                if !ecs.players.contains_key(target_player_id) {
                     self.selected = Selection::WishPicker(player_id, ix);
                 }
             }
@@ -103,17 +105,19 @@ impl GameState {
                     Selection::Inventory(_, Some(ix)) => {
                         let frame = self.history.get_focus_val_mut();
                         let selection = &mut self.selected;
-                        let target_player = frame
+                        let target_player_inventory = frame
+                            .ecs
                             .players
-                            .get_by_id(&target_player_id)
+                            .get(target_player_id)
                             .expect("Selection target player id invalid");
-                        if let Some(cell) = target_player.inventory.cells()[ix].as_ref() {
+                        if let Some(cell) = target_player_inventory.cells()[ix].as_ref() {
                             let item = cell.item.clone();
-                            let mut player = frame
+                            let inventory = frame
+                                .ecs
                                 .players
-                                .get_mut_by_id(player_id)
+                                .get_mut(player_id)
                                 .expect("Couldn't find player by id");
-                            match player.inventory {
+                            match inventory {
                                 Inventory::Actual(_) => panic!("Wishing from actual inventory"),
                                 Inventory::Hypothetical(ref mut hypothetical) => {
                                     hypothetical.wish(item, ix)?;
@@ -137,18 +141,14 @@ impl GameState {
 fn world_selection(pt: Point2, ctx: &ggez::Context, game_state: &GameState) -> Selection {
     let world_space_pt: Point = pixel_space_to_tile_space(pt, graphics::screen_coordinates(ctx))
         .expect("Somehow clicked outside window");
-    let player = game_state
-        .history
-        .get_focus_val()
-        .players
-        .id_by_position(&world_space_pt);
-    match player {
+    let ecs = &game_state.history.get_focus_val().ecs;
+    match player_at(ecs, world_space_pt) {
         Some(id) => Selection::Player(id),
         None => Selection::GridCell(world_space_pt),
     }
 }
 
-fn inventory_selection(pt: Point2, ctx: &ggez::Context, player_id: Id<Player>) -> Selection {
+fn inventory_selection(pt: Point2, ctx: &ggez::Context, player_id: Entity) -> Selection {
     let bbox = inventory_bbox(ctx);
     let inventory_space_pt = pixel_space_to_tile_space(pt, bbox);
     let ix = inventory_space_pt.map(|pt| pt.x as usize + pt.y as usize * INVENTORY_WIDTH);
@@ -279,6 +279,7 @@ impl event::EventHandler for GameState {
                 Err(err) => println!("{}", err),
             },
             KeyCode::Return => match planning::apply_plan(
+                &self.image_map,
                 &self.history.get_focus_val(),
                 &self.current_plan.get(&self.history.focus.children),
             ) {
@@ -318,22 +319,22 @@ impl event::EventHandler for GameState {
         let frame = self.history.get_focus_val();
         render::ecs(ctx, &frame.ecs)?;
         draw_map_grid(ctx, black)?;
-        for (_, player) in frame.players.iter() {
-            self.image_map.player.draw(
-                ctx,
-                DrawParam::new().dest(
-                    transform
-                        * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
-                            player.position,
-                        ),
-                ),
-            )?;
+        // TODO: this should be over entities with positions and plans. IIRC the ECS talk gave some
+        // advice on how to structure stuff like this: ideally this would be a "system" that we'd
+        // say requires a position and a plan and we'd just pass it a function that takes both,
+        // instead of having to do the join ourselves.
+        for (player_id, _) in frame.ecs.players.iter() {
             if let Some(mv) = self
                 .current_plan
                 .get(&self.history.focus.children)
                 .moves
-                .get(&player.id)
+                .get(&player_id)
             {
+                let position = *frame
+                    .ecs
+                    .positions
+                    .get(player_id)
+                    .expect("Player without positon");
                 let (image, rotation) = match *mv {
                     Move::Direction(ref dir) => {
                         let angle = match *dir {
@@ -349,9 +350,8 @@ impl event::EventHandler for GameState {
                     Move::Drop(_) => (&self.image_map.drop_icon, 0.),
                 };
                 let dest = transform
-                    * (nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
-                        player.position,
-                    ) + Vector2::new(0.5, 0.5));
+                    * (nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(position)
+                        + Vector2::new(0.5, 0.5));
                 image.draw(
                     ctx,
                     DrawParam::new()
@@ -406,40 +406,41 @@ impl event::EventHandler for GameState {
                 )?;
             }
             Selection::Player(player_id) | Selection::WishPicker(player_id, _) => {
-                let player = self
+                let position = *self
                     .history
                     .get_focus_val()
-                    .players
-                    .get_by_id(&player_id)
-                    .expect("Invalid player selection");
+                    .ecs
+                    .positions
+                    .get(player_id)
+                    .expect("Missing position for selected player");
                 self.image_map.selection.draw(
                     ctx,
                     DrawParam::new().dest(
                         transform
                             * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
-                                player.position,
+                                position,
                             ),
                     ),
                 )?;
             }
             Selection::Inventory(player_id, ref selected_item_option) => {
-                let inventory = &self
+                let inventory = self
                     .history
                     .get_focus_val()
+                    .ecs
                     .players
-                    .get_by_id(&player_id)
-                    .expect("Invalid inventory player")
-                    .inventory;
+                    .get(player_id)
+                    .expect("Invalid inventory player");
                 render_inventory(inventory, ctx, &self.image_map, selected_item_option)?;
             }
             Selection::WishPickerInventoryViewer(_player_id, _ix, target_player_id) => {
-                let inventory = &self
+                let inventory = self
                     .history
                     .get_focus_val()
+                    .ecs
                     .players
-                    .get_by_id(&target_player_id)
-                    .expect("Invalid inventory player")
-                    .inventory;
+                    .get(target_player_id)
+                    .expect("Invalid inventory player");
                 render_inventory(inventory, ctx, &self.image_map, &None)?;
             }
         }

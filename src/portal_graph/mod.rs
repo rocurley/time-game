@@ -1,4 +1,4 @@
-use crate::types::{Id, ItemDrop, Player, Portal};
+use crate::types::{Entity, Id, ItemDrop, Player, Portal};
 use petgraph::{dot::Dot, graphmap::DiGraphMap, Direction::Incoming, Graph};
 use std::{cmp::Ordering, collections::HashMap};
 
@@ -14,16 +14,16 @@ pub enum ItemPortalGraphNode {
     Beginning,
     Dropped(Id<ItemDrop>),
     Portal(Id<Portal>),
-    Held(Id<Player>, usize), //Index. Lets you figure out the last node the player was at.
+    Held(Entity, usize), //Index. Lets you figure out the last node the player was at.
 }
 
-// TODO: I think we could replace this with a Vec<Vec<(PlayerPortalGraphNode, Id<Player>)>>
-pub type PlayerPortalGraph = DiGraphMap<PlayerPortalGraphNode, Id<Player>>;
+// TODO: I think we could replace this with a Vec<Vec<(PlayerPortalGraphNode, Entity)>>
+pub type PlayerPortalGraph = DiGraphMap<PlayerPortalGraphNode, Entity>;
 pub type ItemPortalGraph = DiGraphMap<ItemPortalGraphNode, usize>;
 
 pub fn render_item_graph(graph: &ItemPortalGraph) {
     let graph_graph: Graph<_, _, _> = graph.clone().into_graph();
-    let mut player_names = HashMap::<Id<Player>, char>::new();
+    let mut player_names = HashMap::<Entity, char>::new();
     let mut next_player = 'A';
     let simpler_graph = graph_graph.map(
         |_, node| match node {
@@ -48,10 +48,7 @@ pub fn render_player_graph(graph: &PlayerPortalGraph) {
     println!("{:?}", Dot::with_config(graph, &[]));
 }
 
-pub fn find_trail_from_origin(
-    graph: &PlayerPortalGraph,
-    id: Id<Player>,
-) -> Option<Vec<Id<Player>>> {
+pub fn find_trail_from_origin(graph: &PlayerPortalGraph, id: Entity) -> Option<Vec<Entity>> {
     let nodes: Vec<PlayerPortalGraphNode> = graph
         .neighbors_directed(PlayerPortalGraphNode::End, Incoming)
         .filter(|n| {
@@ -90,7 +87,7 @@ pub fn find_trail_from_origin(
 fn player_held_nodes(
     graph: &ItemPortalGraph,
     player_graph: &PlayerPortalGraph,
-    id: Id<Player>,
+    id: Entity,
 ) -> Option<Vec<ItemPortalGraphNode>> {
     let player_ids = find_trail_from_origin(player_graph, id)?;
     println!("player_held_nodes");
@@ -110,7 +107,7 @@ fn player_held_nodes(
 pub fn signed_wish(
     graph: &mut ItemPortalGraph,
     player_graph: &PlayerPortalGraph,
-    id: Id<Player>,
+    id: Entity,
     count: i32,
 ) {
     match count.cmp(&0) {
@@ -123,7 +120,7 @@ pub fn signed_wish(
 pub fn wish(
     graph: &mut ItemPortalGraph,
     player_graph: &PlayerPortalGraph,
-    id: Id<Player>,
+    id: Entity,
     count: usize,
 ) {
     println!("portal_graph::wish");
@@ -146,7 +143,7 @@ pub fn wish(
 pub fn unwish(
     graph: &mut ItemPortalGraph,
     player_graph: &PlayerPortalGraph,
-    id: Id<Player>,
+    id: Entity,
     count: usize,
 ) {
     let held_nodes =
@@ -168,7 +165,7 @@ pub fn unwish(
     }
 }
 
-pub fn find_latest_held_index(graph: &ItemPortalGraph, player_id: Id<Player>) -> Option<usize> {
+pub fn find_latest_held_index(graph: &ItemPortalGraph, player_id: Entity) -> Option<usize> {
     if !graph.contains_node(ItemPortalGraphNode::Held(player_id, 0)) {
         return None;
     }
@@ -179,9 +176,6 @@ pub fn find_latest_held_index(graph: &ItemPortalGraph, player_id: Id<Player>) ->
     Some(last)
 }
 
-pub fn find_latest_held(
-    graph: &ItemPortalGraph,
-    player_id: Id<Player>,
-) -> Option<ItemPortalGraphNode> {
+pub fn find_latest_held(graph: &ItemPortalGraph, player_id: Entity) -> Option<ItemPortalGraphNode> {
     find_latest_held_index(graph, player_id).map(|i| ItemPortalGraphNode::Held(player_id, i))
 }
