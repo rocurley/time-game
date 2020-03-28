@@ -3,7 +3,7 @@ use crate::{
     game_frame::GameFrame,
     types::{player_at, Direction, ImageMap, Move, Plan, Point},
 };
-use ggez::{nalgebra::Point2, *};
+use ggez::nalgebra::Point2;
 use proptest::{self, prelude::*};
 use std::collections::HashSet;
 
@@ -53,9 +53,8 @@ fn valid_plan(game_frame: GameFrame) -> BoxedStrategy<Plan> {
 }
 
 fn unfold_arbitrary_plans(depth: u32) -> BoxedStrategy<Vec<GameFrame>> {
-    let cb = ContextBuilder::new("time game test", "Roger");
-    let (ctx, _) = &mut cb.build().unwrap();
-    let image_map = &*std::boxed::Box::leak(Box::new(ImageMap::new(ctx).unwrap()));
+    let image_map_owned = ImageMap::mock();
+    let image_map = &*Box::leak(Box::new(image_map_owned));
     arbitrary_point()
         .prop_map(move |pos| {
             let mut frame = GameFrame::new();
@@ -70,7 +69,7 @@ fn unfold_arbitrary_plans(depth: u32) -> BoxedStrategy<Vec<GameFrame>> {
                     let prior_frame: GameFrame =
                         prior_frames.last().expect("Empty frames vec").clone();
                     valid_plan(prior_frame.clone())
-                        .prop_map(move |plan| apply_plan(image_map, &prior_frame, &plan))
+                        .prop_map(move |plan| apply_plan(&image_map, &prior_frame, &plan))
                         .prop_filter("plan wasn't allowed", Result::is_ok)
                         .prop_map(move |frame| {
                             let new_frame = frame.expect("Should have been filtered");
@@ -94,9 +93,7 @@ proptest! {
 }
 #[test]
 fn test_loop() {
-    let mut cb = ContextBuilder::new("time game test", "Roger");
-    let (ctx, _) = &mut cb.build().unwrap();
-    let image_map = ImageMap::new(ctx).unwrap();
+    let image_map = ImageMap::mock();
     let game_frame_0 = GameFrame::new();
     let mut plan_0 = Plan::new();
     plan_0.portals.insert(Point2::new(0, 0));
@@ -110,9 +107,7 @@ fn test_loop() {
 }
 #[test]
 fn test_two_jumps() {
-    let mut cb = ContextBuilder::new("time game test", "Roger");
-    let (ctx, _) = &mut cb.build().unwrap();
-    let image_map = ImageMap::new(ctx).unwrap();
+    let image_map = ImageMap::mock();
     let mut game_frame_0 = GameFrame::new();
     let player_0_id = game_frame_0
         .insert_player(&image_map, Point2::new(0, 0))

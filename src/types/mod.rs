@@ -298,6 +298,44 @@ impl ImageMap {
             lights,
         })
     }
+    pub fn mock() -> Self {
+        let empty_image = Box::leak(Box::new(EmptyImage {}));
+        ImageMap {
+            player: empty_image,
+            selection: empty_image,
+            move_arrow: empty_image,
+            jump_icon: empty_image,
+            pick_up_icon: empty_image,
+            drop_icon: empty_image,
+            portal: empty_image,
+            key: empty_image,
+            wall: empty_image,
+            open_door: empty_image,
+            closed_door: empty_image,
+            plate: empty_image,
+            lights: [empty_image; 4],
+        }
+    }
+}
+
+#[derive(Debug)]
+struct EmptyImage {}
+
+impl ggez::graphics::Drawable for EmptyImage {
+    fn draw(
+        &self,
+        _ctx: &mut ggez::Context,
+        _param: ggez::graphics::DrawParam,
+    ) -> ggez::GameResult<()> {
+        Ok(())
+    }
+    fn dimensions(&self, _ctx: &mut ggez::Context) -> Option<ggez::graphics::Rect> {
+        None
+    }
+    fn set_blend_mode(&mut self, _mode: Option<ggez::graphics::BlendMode>) {}
+    fn blend_mode(&self) -> Option<ggez::graphics::BlendMode> {
+        None
+    }
 }
 
 #[derive(Clone, Debug)]
