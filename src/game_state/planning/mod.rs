@@ -32,6 +32,12 @@ pub fn apply_plan(
     // gnarliest parts of the codebase.
     let mut jumpers: Vec<Entity> = Vec::new();
     for (&entity, mv) in plan.moves.iter() {
+        if !out.ecs.entities.contains_key(entity) {
+            panic!(
+                "Plan for non-existant entity {:?} : ECS: {:#?}, Plan: {:#?}",
+                entity, &out.ecs, plan
+            );
+        }
         match mv {
             Move::Direction(ref direction) => {
                 let position = out
@@ -320,7 +326,6 @@ pub fn apply_plan(
         let mut item_counts = prior_inventory.count_items();
         let (new_post_inventory, wishes) = post_inventory_hypothetical.merge_in(prior_inventory)?;
         *post_inventory = new_post_inventory;
-        dbg!(&wishes);
         // Propegate the merge-implied wishes to the item graph. We need to do this before
         // modifying the players portal graph, or before adding the new edge to the item portal
         // graphs. Conceptually, wishing and unwishing happens _before_ the portal closes, to make
@@ -375,7 +380,6 @@ pub fn apply_plan(
             Err("Created infinite loop")?;
         }
         // Add the edge linking prior and post players to the item portal graph
-        dbg!(post_inventory);
         for (item, item_portal_graph) in out.item_portal_graphs.iter_mut() {
             if let Some(origin_node) = find_latest_held(item_portal_graph, prior_player) {
                 item_portal_graph.add_edge(

@@ -1,7 +1,7 @@
 use super::apply_plan;
 use crate::{
     game_frame::GameFrame,
-    types::{player_at, Direction, ImageMap, Move, Plan, Point},
+    types::{player_at, Direction, Entity, ImageMap, Move, Plan, Point},
 };
 use ggez::nalgebra::Point2;
 use proptest::{self, prelude::*};
@@ -22,20 +22,19 @@ fn arbitrary_point() -> BoxedStrategy<Point> {
 }
 
 fn valid_plan(game_frame: GameFrame) -> BoxedStrategy<Plan> {
+    let players: Vec<Entity> = game_frame
+        .ecs
+        .players
+        .iter()
+        .map(|(k, _)| k)
+        .filter(|k| game_frame.ecs.entities.contains_key(*k))
+        .collect();
     #[allow(clippy::range_plus_one)]
     let moves = proptest::collection::vec(
         proptest::sample::select(POSSIBLE_MOVES.as_ref()),
-        game_frame.ecs.players.len()..game_frame.ecs.players.len() + 1,
+        players.len()..players.len() + 1,
     )
-    .prop_map(move |moves_vec| {
-        game_frame
-            .ecs
-            .players
-            .iter()
-            .map(|(id, _)| id)
-            .zip(moves_vec.into_iter())
-            .collect()
-    });
+    .prop_map(move |moves_vec| players.iter().copied().zip(moves_vec.into_iter()).collect());
     let portals = prop_oneof![
         4 => Just(HashSet::new()),
         1 =>
@@ -87,7 +86,8 @@ proptest! {
     #[test]
     fn test_apply_plan(ref game_frames in unfold_arbitrary_plans(10)) {
         for frame in game_frames.iter() {
-            prop_assert_eq!(frame.ecs.players.len() - frame.portals.len(), 1);
+            let n_players = frame.ecs.players.iter().filter(|(k,_)| frame.ecs.entities.contains_key(*k)).count();
+            prop_assert_eq!(n_players - frame.portals.len(), 1);
         }
     }
 }

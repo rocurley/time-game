@@ -1047,8 +1047,18 @@ impl ECS {
         let player = self.entities.insert(());
         self.players.insert(player, inventory);
         self.positions.insert(player, pos);
-        self.images.insert(player, image_map.player.clone());
+        self.images.insert(player, image_map.player);
         player
+    }
+    pub fn verify(&self) {
+        for (player, _inventory) in self.players.iter() {
+            if !self.entities.contains_key(player) {
+                continue;
+            }
+            if !self.positions.contains_key(player) {
+                panic!("Player without position in ECS: {:#?}", self)
+            }
+        }
     }
 }
 
