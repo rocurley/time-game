@@ -1,4 +1,4 @@
-use crate::types::{Entity, Id, ItemDrop, Player, Portal};
+use crate::types::{Entity, Id, ItemDrop, Portal};
 use petgraph::{dot::Dot, graphmap::DiGraphMap, Direction::Incoming, Graph};
 use std::{cmp::Ordering, collections::HashMap};
 

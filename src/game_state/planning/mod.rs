@@ -25,11 +25,6 @@ pub fn apply_plan(
     plan: &Plan,
 ) -> Result<GameFrame, GameError> {
     let mut out = initial_frame.clone();
-    // TODO: we need to figure out if we're mutating step-by-step and then validating or clearing
-    // and then inserting as we go, like we used to. I think mutating step-by-step and validating
-    // probably makes the most sense, since we can't clear the ECS of players nearly as easly.
-    // Hopefully this will result in a cleaner solution as well: this has always been one of the
-    // gnarliest parts of the codebase.
     let mut jumpers: Vec<Entity> = Vec::new();
     for (&entity, mv) in plan.moves.iter() {
         if !out.ecs.entities.contains_key(entity) {
@@ -54,6 +49,7 @@ pub fn apply_plan(
                 *position += delta;
             }
             Move::Jump => {
+                // TODO: this is out of date: inline jumpers with the rest of the code here.
                 // We can't do everything right now, because we need to wait for all the players to
                 // exist in the new game frame. To make thing simple, we'll wait to do anything at
                 // all.

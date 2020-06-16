@@ -197,15 +197,6 @@ impl DoubleMappable for Portal {
     }
 }
 
-impl DoubleMappable for Player {
-    fn position(&self) -> Point {
-        self.position
-    }
-    fn id(&self) -> Id<Player> {
-        self.id
-    }
-}
-
 impl DoubleMappable for ItemDrop {
     fn position(&self) -> Point {
         self.position
@@ -804,23 +795,6 @@ impl Inventory {
         match self {
             Inventory::Actual(actual) => actual.count_items(),
             Inventory::Hypothetical(hypothetical) => hypothetical.count_items(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Player {
-    pub id: Id<Player>,
-    pub position: Point,
-    pub inventory: Inventory,
-}
-
-impl Player {
-    pub fn new(position: Point) -> Self {
-        Player {
-            id: rand::random(),
-            position,
-            inventory: Inventory::Actual(ActualInventory::new()),
         }
     }
 }

@@ -1,6 +1,6 @@
 use ggez::{
     event,
-    graphics::{self, Color, DrawParam, Drawable},
+    graphics::{self, Color, DrawParam},
 };
 use std::f32::consts::PI;
 

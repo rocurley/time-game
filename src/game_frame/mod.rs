@@ -3,8 +3,8 @@ use crate::{
         self, ItemPortalGraph, ItemPortalGraphNode, PlayerPortalGraph, PlayerPortalGraphNode,
     },
     types::{
-        ActualInventory, DoubleMap, Entity, GameError, Id, ImageMap, Inventory, Item, ItemDrop,
-        Player, Point, Portal, ECS,
+        ActualInventory, DoubleMap, Entity, GameError, ImageMap, Inventory, Item, ItemDrop, Point,
+        Portal, ECS,
     },
 };
 use petgraph::graphmap::GraphMap;
