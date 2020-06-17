@@ -2,7 +2,7 @@ extern crate time_game_lib;
 
 use time_game_lib::{
     game_state::GameState,
-    types::{Action, Counter, Group, Item, ItemDrop, Key, MapElement},
+    types::{Action, Counter, Direction, Group, Item, ItemDrop, Key, MapElement},
 };
 
 extern crate ggez;
@@ -120,6 +120,14 @@ pub fn main() {
     MapElement::Plate(Counter::Unlock, light).add(
         &game_state.image_map,
         Point2::new(2, 5),
+        &mut game_frame.ecs,
+    );
+    MapElement::MovingWall {
+        direction: Direction::Up,
+    }
+    .add(
+        &game_state.image_map,
+        Point2::new(4, 10),
         &mut game_frame.ecs,
     );
     event::run(ctx, event_loop, game_state).unwrap();

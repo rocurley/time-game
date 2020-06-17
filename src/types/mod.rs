@@ -850,6 +850,9 @@ pub enum MapElement {
         rising: Action,
         falling: Action,
     },
+    MovingWall {
+        direction: Direction,
+    },
 }
 impl MapElement {
     pub fn image(&self, image_map: &ImageMap) -> Option<DrawRef> {
@@ -860,6 +863,7 @@ impl MapElement {
             MapElement::OpenDoor => Some(image_map.open_door),
             MapElement::Plate(_, _) => Some(image_map.plate),
             MapElement::Light { .. } => Some(image_map.lights[0]),
+            MapElement::MovingWall { .. } => Some(image_map.wall),
         }
     }
     pub fn passable(&self) -> bool {
@@ -870,7 +874,8 @@ impl MapElement {
             | MapElement::RemoteDoor // Dealt with later
             | MapElement::Plate(_, _)
             | MapElement::Light{..} => true,
-            MapElement::Wall=> false,
+            MapElement::Wall
+            | MapElement::MovingWall {..}=> false,
         }
     }
     pub fn add(&self, image_map: &ImageMap, pt: Point, ecs: &mut ECS) -> Entity {
@@ -965,6 +970,19 @@ impl MapElement {
                     EventTrigger::PlayerIntersect,
                     Action::Reject("impassible"),
                 ));
+            }
+            MapElement::MovingWall { direction } => {
+                event_listeners.push(EventListener::new(
+                    EventTrigger::PlayerIntersect,
+                    Action::Reject("impassible"),
+                ));
+                ecs.movement.insert(
+                    e,
+                    Movement {
+                        direction: Some(*direction),
+                        movement_type: MovementType::Constant(*direction),
+                    },
+                );
             }
             _ => {}
         };
