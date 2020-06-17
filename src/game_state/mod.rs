@@ -275,6 +275,7 @@ impl event::EventHandler for GameState {
             KeyCode::Back => match self.history.up() {
                 Ok(ix) => {
                     self.current_plan = CachablePlan::Old(ix);
+                    self.validate_selection();
                 }
                 Err(err) => println!("{}", err),
             },
