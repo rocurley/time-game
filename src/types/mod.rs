@@ -346,7 +346,7 @@ impl Portal {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum Direction {
     Up,
     Down,
@@ -356,6 +356,7 @@ pub enum Direction {
 
 #[derive(Clone, Debug)]
 pub enum Move {
+    Direction(Direction),
     Jump,
     PickUp,
     Drop(usize),
@@ -1022,6 +1023,13 @@ impl ECS {
         self.players.insert(player, inventory);
         self.positions.insert(player, pos);
         self.images.insert(player, image_map.player);
+        self.movement.insert(
+            player,
+            Movement {
+                direction: None,
+                movement_type: MovementType::PlayerControlled,
+            },
+        );
         player
     }
     pub fn verify(&self) {
@@ -1126,7 +1134,7 @@ pub struct EventListener {
     pub priority: Priority,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum MovementType {
     PlayerControlled,
     Constant(Direction),

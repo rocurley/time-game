@@ -27,25 +27,9 @@ pub fn apply_plan(
 ) -> Result<GameFrame, GameError> {
     let mut out = initial_frame.clone();
     let mut jumpers: Vec<Entity> = Vec::new();
-    for (entity, (position, movement)) in
-        inner_join(out.ecs.positions.iter_mut(), &out.ecs.movement)
-    {
-        if let Some(direction) = movement.direction {
-            let delta: nalgebra::Vector2<i32> = match direction {
-                Direction::Up => -nalgebra::Vector2::y(),
-                Direction::Down => nalgebra::Vector2::y(),
-                Direction::Left => -nalgebra::Vector2::x(),
-                Direction::Right => nalgebra::Vector2::x(),
-            };
-            *position += delta;
-        }
-    }
-    for (entity, movement) in out.ecs.movement.iter_mut() {
-        match movement.movement_type {
-            MovementType::PlayerControlled => movement.direction = None,
-            MovementType::Constant(dir) => movement.direction = Some(dir),
-        }
-    }
+
+    // Apply the plan
+
     for (&entity, mv) in plan.moves.iter() {
         if !out.ecs.entities.contains_key(entity) {
             panic!(
@@ -54,6 +38,15 @@ pub fn apply_plan(
             );
         }
         match mv {
+            Move::Direction(direction) => {
+                let movement = out
+                    .ecs
+                    .movement
+                    .get_mut(entity)
+                    .expect("Plan referenced entity with no movement component");
+                assert_eq!(movement.movement_type, MovementType::PlayerControlled);
+                movement.direction = Some(*direction);
+            }
             Move::Jump => {
                 // TODO: this is out of date: inline jumpers with the rest of the code here.
                 //
@@ -142,6 +135,30 @@ pub fn apply_plan(
             player,
         );
     }
+
+    // Movement
+
+    for (entity, (position, movement)) in
+        inner_join(out.ecs.positions.iter_mut(), &out.ecs.movement)
+    {
+        if let Some(direction) = movement.direction {
+            let delta: nalgebra::Vector2<i32> = match direction {
+                Direction::Up => -nalgebra::Vector2::y(),
+                Direction::Down => nalgebra::Vector2::y(),
+                Direction::Left => -nalgebra::Vector2::x(),
+                Direction::Right => nalgebra::Vector2::x(),
+            };
+            *position += delta;
+        }
+    }
+    for (entity, movement) in out.ecs.movement.iter_mut() {
+        match movement.movement_type {
+            MovementType::PlayerControlled => movement.direction = None,
+            MovementType::Constant(dir) => movement.direction = Some(dir),
+        }
+    }
+
+    // Event Listeners
 
     // This is pretty stupid. We want to have out.ecs.event_listeners borrowed mutably while
     // manipulating the rest of the ecs member variables. To convince rust that this is safe, we
@@ -283,6 +300,8 @@ pub fn apply_plan(
         }
     }
     std::mem::swap(&mut event_listeners, &mut out.ecs.event_listeners);
+
+    // Jumpers
 
     while let Some(prior_player) = jumpers.pop() {
         // First, we remove the portal.
