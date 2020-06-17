@@ -90,14 +90,14 @@ pub fn main() {
         rising: Action::All(vec![
             Action::SetImage {
                 target: light_door,
-                img: game_state.image_map.open_door.clone(),
+                img: game_state.image_map.open_door,
             },
             Action::DisableGroup(light_door, Group::Locked),
         ]),
         falling: Action::All(vec![
             Action::SetImage {
                 target: light_door,
-                img: game_state.image_map.closed_door.clone(),
+                img: game_state.image_map.closed_door,
             },
             Action::EnableGroup(light_door, Group::Locked),
         ]),

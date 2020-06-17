@@ -130,7 +130,7 @@ impl<T, E> Zipper<T, E> {
             .ok_or("Nothing to the right")
     }
     pub fn rezip(mut self) -> RoseTree<T, E> {
-        while let Ok(_) = self.up() {}
+        while self.up().is_ok() {}
         self.focus
     }
     pub fn push(&mut self, x: T, edge: E) {

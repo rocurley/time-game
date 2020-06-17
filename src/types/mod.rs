@@ -572,7 +572,7 @@ impl HypotheticalInventory {
                 //
                 let mut extras = count_cells_items(&hypothetical_other.cells);
                 let mut other_minima = hypothetical_other.minima.clone();
-                let mut other_constraints = hypothetical_other.constraints.clone();
+                let mut other_constraints = hypothetical_other.constraints;
                 let mut self_constraints = self.constraints.clone();
                 let mut minima = self.minima.clone();
                 let mut cells = self.cells.clone();
@@ -926,7 +926,7 @@ impl MapElement {
                         ),
                         Action::SetImage {
                             target: e,
-                            img: image_map.lights[i as usize].clone(),
+                            img: image_map.lights[i as usize],
                         },
                     )
                     .with_priority(Priority::Cleanup)
@@ -1185,10 +1185,7 @@ pub fn entities_at(ecs: &ECS, pt: Point) -> Vec<Entity> {
 
 pub fn player_at(ecs: &ECS, pt: Point) -> Option<Entity> {
     let entities = entities_at(ecs, pt);
-    entities
-        .into_iter()
-        .filter(|e| ecs.players.contains_key(*e))
-        .next()
+    entities.into_iter().find(|e| ecs.players.contains_key(*e))
 }
 
 #[cfg(test)]

@@ -271,7 +271,7 @@ pub fn apply_plan(
 
     // Movement
 
-    for (entity, (position, movement)) in
+    for (_entity, (position, movement)) in
         inner_join(out.ecs.positions.iter_mut(), &out.ecs.movement)
     {
         if let Some(direction) = movement.direction {
@@ -284,7 +284,7 @@ pub fn apply_plan(
             *position += delta;
         }
     }
-    for (entity, movement) in out.ecs.movement.iter_mut() {
+    for (_entity, movement) in out.ecs.movement.iter_mut() {
         match movement.movement_type {
             MovementType::PlayerControlled => movement.direction = None,
             MovementType::Constant(dir) => movement.direction = Some(dir),
@@ -406,7 +406,7 @@ pub fn apply_plan(
                     };
                 }
                 Action::SetImage { target, img } => {
-                    out.ecs.images.insert(*target, img.clone());
+                    out.ecs.images.insert(*target, *img);
                 }
                 Action::EnableGroup(target, group) => {
                     if let Some(disabled_groups) = out.ecs.disabled_event_groups.get_mut(*target) {

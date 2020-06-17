@@ -118,7 +118,7 @@ impl GameFrame {
                 None => return Ok(FrameWishResult::NoItem),
                 Some(ref cell) => cell.item.clone(),
             };
-            let item_portal_graph = item_portal_graphs.entry(item.clone()).or_default();
+            let item_portal_graph = item_portal_graphs.entry(item).or_default();
             hypothetical.unwish(ix)?;
             portal_graph::unwish(item_portal_graph, player_portal_graph, player, 1);
         }
