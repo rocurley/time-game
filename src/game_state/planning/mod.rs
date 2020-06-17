@@ -10,8 +10,9 @@ use crate::{
         ItemPortalGraphNode, PlayerPortalGraphNode,
     },
     types::{
-        player_at, Action, Direction, Entity, EventTrigger, EventTriggerModifier, GameError,
-        HypotheticalInventory, ImageMap, Inventory, ItemDrop, Move, Plan, Portal,
+        inner_join, player_at, Action, Direction, Entity, EventTrigger, EventTriggerModifier,
+        GameError, HypotheticalInventory, ImageMap, Inventory, ItemDrop, Move, MovementType, Plan,
+        Portal,
     },
 };
 use enum_map::EnumMap;
@@ -26,6 +27,25 @@ pub fn apply_plan(
 ) -> Result<GameFrame, GameError> {
     let mut out = initial_frame.clone();
     let mut jumpers: Vec<Entity> = Vec::new();
+    for (entity, (position, movement)) in
+        inner_join(out.ecs.positions.iter_mut(), &out.ecs.movement)
+    {
+        if let Some(direction) = movement.direction {
+            let delta: nalgebra::Vector2<i32> = match direction {
+                Direction::Up => -nalgebra::Vector2::y(),
+                Direction::Down => nalgebra::Vector2::y(),
+                Direction::Left => -nalgebra::Vector2::x(),
+                Direction::Right => nalgebra::Vector2::x(),
+            };
+            *position += delta;
+        }
+    }
+    for (entity, movement) in out.ecs.movement.iter_mut() {
+        match movement.movement_type {
+            MovementType::PlayerControlled => movement.direction = None,
+            MovementType::Constant(dir) => movement.direction = Some(dir),
+        }
+    }
     for (&entity, mv) in plan.moves.iter() {
         if !out.ecs.entities.contains_key(entity) {
             panic!(
@@ -34,22 +54,9 @@ pub fn apply_plan(
             );
         }
         match mv {
-            Move::Direction(ref direction) => {
-                let position = out
-                    .ecs
-                    .positions
-                    .get_mut(entity)
-                    .expect("Attempted to move entity with no position");
-                let delta: nalgebra::Vector2<i32> = match *direction {
-                    Direction::Up => -nalgebra::Vector2::y(),
-                    Direction::Down => nalgebra::Vector2::y(),
-                    Direction::Left => -nalgebra::Vector2::x(),
-                    Direction::Right => nalgebra::Vector2::x(),
-                };
-                *position += delta;
-            }
             Move::Jump => {
                 // TODO: this is out of date: inline jumpers with the rest of the code here.
+                //
                 // We can't do everything right now, because we need to wait for all the players to
                 // exist in the new game frame. To make thing simple, we'll wait to do anything at
                 // all.

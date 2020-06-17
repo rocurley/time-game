@@ -356,7 +356,6 @@ pub enum Direction {
 
 #[derive(Clone, Debug)]
 pub enum Move {
-    Direction(Direction),
     Jump,
     PickUp,
     Drop(usize),
@@ -1009,6 +1008,7 @@ pub struct ECS {
     pub disabled_event_groups: Components<EnumSet<Group>>,
     pub counters: Components<EnumMap<Counter, i64>>,
     pub players: Components<Inventory>,
+    pub movement: Components<Movement>,
 }
 
 impl ECS {
@@ -1034,6 +1034,19 @@ impl ECS {
             }
         }
     }
+}
+
+// TODO: doing a mutable join is really tricky here: get_mut doesn't trust that all your entities
+// are different. If you've only got one mutable component, that's fine: you use that as your base.
+// If you've got more, you probably need to do it by hand.
+pub fn inner_join<I: Iterator<Item = (Entity, T1)>, T1, T2>(
+    iter: I,
+    other: &Components<T2>,
+) -> impl Iterator<Item = (Entity, (T1, &T2))> {
+    iter.filter_map(move |(e, x1)| {
+        let x2 = other.get(e)?;
+        Some((e, (x1, x2)))
+    })
 }
 
 pub trait DrawDebug: graphics::Drawable + std::fmt::Debug {}
@@ -1111,6 +1124,18 @@ pub struct EventListener {
     pub action: Action,
     pub group: Group,
     pub priority: Priority,
+}
+
+#[derive(Clone, Debug)]
+pub enum MovementType {
+    PlayerControlled,
+    Constant(Direction),
+}
+
+#[derive(Clone, Debug)]
+pub struct Movement {
+    pub direction: Option<Direction>,
+    pub movement_type: MovementType,
 }
 
 impl EventListener {
