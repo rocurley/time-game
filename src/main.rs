@@ -37,21 +37,6 @@ pub fn main() {
     game_frame
         .insert_item_drop(ItemDrop::new(Item::Key(Key {}), Point2::new(1, 1)), 1)
         .expect("Could not insert item");
-    // TODO: Some possible puzzles:
-    // Key in a locked room (below)
-    // Multiple blocks required, only 1 block exists.
-    // Get something from the end of a hallway with death walls coming towards you, IE:
-    // ----------------------
-    // x    x    x    x    x
-    // ----------------------
-    // ...
-    // ----------------------
-    //  x    x    x    x    x
-    // ----------------------
-    // ...
-    // ----------------------
-    //   x    x    x    x
-    // ----------------------
     let light_door = MapElement::RemoteDoor.add(
         &game_state.image_map,
         Point2::new(5, 6),
@@ -83,6 +68,7 @@ pub fn main() {
         (
             MapElement::Wall,
             vec![
+                // Key Box
                 (0, 0),
                 (1, 0),
                 (2, 0),
@@ -94,6 +80,25 @@ pub fn main() {
                 (0, 3),
                 (2, 3),
                 (3, 3),
+                // Death hallway
+                (9, 0),
+                (9, 1),
+                (9, 3),
+                (9, 4),
+                (9, 5),
+                (9, 6),
+                (9, 7),
+                (9, 8),
+                (9, 9),
+                (7, 0),
+                (7, 1),
+                (7, 2),
+                (7, 3),
+                (7, 4),
+                (7, 5),
+                (7, 6),
+                (7, 8),
+                (7, 9),
             ],
         ),
         (MapElement::ClosedDoor, vec![(1, 3)]),
