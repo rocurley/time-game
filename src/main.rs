@@ -52,34 +52,6 @@ pub fn main() {
     // ----------------------
     //   x    x    x    x
     // ----------------------
-    let map = [
-        (
-            MapElement::Wall,
-            vec![
-                (0, 0),
-                (1, 0),
-                (2, 0),
-                (3, 0),
-                (0, 1),
-                (3, 1),
-                (0, 2),
-                (3, 2),
-                (0, 3),
-                (2, 3),
-                (3, 3),
-            ],
-        ),
-        (MapElement::ClosedDoor, vec![(1, 3)]),
-    ];
-    for (el, pts) in map.iter() {
-        for &(x, y) in pts {
-            el.add(
-                &game_state.image_map,
-                Point2::new(x, y),
-                &mut game_frame.ecs,
-            );
-        }
-    }
     let light_door = MapElement::RemoteDoor.add(
         &game_state.image_map,
         Point2::new(5, 6),
@@ -107,28 +79,44 @@ pub fn main() {
         Point2::new(5, 5),
         &mut game_frame.ecs,
     );
-    MapElement::Plate(Counter::Unlock, light).add(
-        &game_state.image_map,
-        Point2::new(4, 5),
-        &mut game_frame.ecs,
-    );
-    MapElement::Plate(Counter::Unlock, light).add(
-        &game_state.image_map,
-        Point2::new(3, 5),
-        &mut game_frame.ecs,
-    );
-    MapElement::Plate(Counter::Unlock, light).add(
-        &game_state.image_map,
-        Point2::new(2, 5),
-        &mut game_frame.ecs,
-    );
-    MapElement::MovingWall {
-        direction: Direction::Up,
+    let map = [
+        (
+            MapElement::Wall,
+            vec![
+                (0, 0),
+                (1, 0),
+                (2, 0),
+                (3, 0),
+                (0, 1),
+                (3, 1),
+                (0, 2),
+                (3, 2),
+                (0, 3),
+                (2, 3),
+                (3, 3),
+            ],
+        ),
+        (MapElement::ClosedDoor, vec![(1, 3)]),
+        (
+            MapElement::Plate(Counter::Unlock, light),
+            vec![(2, 5), (3, 5), (4, 5)],
+        ),
+        (
+            MapElement::MovingWall {
+                reset: Some((Point2::new(8, 0), Point2::new(8, 12))),
+                direction: Direction::Down,
+            },
+            vec![(8, 0), (8, 4), (8, 8)],
+        ),
+    ];
+    for (el, pts) in map.iter() {
+        for &(x, y) in pts {
+            el.add(
+                &game_state.image_map,
+                Point2::new(x, y),
+                &mut game_frame.ecs,
+            );
+        }
     }
-    .add(
-        &game_state.image_map,
-        Point2::new(4, 10),
-        &mut game_frame.ecs,
-    );
     event::run(ctx, event_loop, game_state).unwrap();
 }

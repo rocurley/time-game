@@ -349,6 +349,9 @@ pub fn apply_plan(
                     .map_or(0, |counters| counters[*counter]);
                 p(count)
             }
+            EventTrigger::PositionPredicate(p) => {
+                out.ecs.positions.get(entity).map_or(false, |x| p(*x))
+            }
         };
         let triggered = match &mut event_listener.modifier {
             EventTriggerModifier::Unmodified => base_triggered,
@@ -407,6 +410,9 @@ pub fn apply_plan(
                 }
                 Action::SetImage { target, img } => {
                     out.ecs.images.insert(*target, *img);
+                }
+                Action::SetPosition { target, position } => {
+                    out.ecs.positions.insert(*target, *position);
                 }
                 Action::EnableGroup(target, group) => {
                     if let Some(disabled_groups) = out.ecs.disabled_event_groups.get_mut(*target) {

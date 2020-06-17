@@ -852,6 +852,7 @@ pub enum MapElement {
     },
     MovingWall {
         direction: Direction,
+        reset: Option<(Point, Point)>,
     },
 }
 impl MapElement {
@@ -971,11 +972,20 @@ impl MapElement {
                     Action::Reject("impassible"),
                 ));
             }
-            MapElement::MovingWall { direction } => {
+            MapElement::MovingWall { direction, reset } => {
                 event_listeners.push(EventListener::new(
                     EventTrigger::PlayerIntersect,
                     Action::Reject("impassible"),
                 ));
+                if let Some((start, end)) = *reset {
+                    event_listeners.push(EventListener::new(
+                        EventTrigger::PositionPredicate(Rc::new(Box::new(move |pt| pt == end))),
+                        Action::SetPosition {
+                            target: e,
+                            position: start,
+                        },
+                    ));
+                }
                 ecs.movement.insert(
                     e,
                     Movement {
@@ -1096,6 +1106,7 @@ pub enum EventTrigger {
         Counter,
         #[derivative(Debug = "ignore")] Rc<Box<dyn Fn(i64) -> bool>>,
     ),
+    PositionPredicate(#[derivative(Debug = "ignore")] Rc<Box<dyn Fn(Point) -> bool>>),
 }
 
 #[derive(Copy, Clone, Debug, Enum)]
@@ -1120,6 +1131,10 @@ pub enum Action {
     },
     EnableGroup(Entity, Group),
     DisableGroup(Entity, Group),
+    SetPosition {
+        target: Entity,
+        position: Point,
+    },
     All(Vec<Action>),
 }
 
