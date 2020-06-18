@@ -1,17 +1,20 @@
 use ggez::{
     event,
-    graphics::{self, Color, DrawParam},
+    graphics::{self, Color},
 };
 use std::f32::consts::PI;
 
-use ggez::nalgebra::{self, Similarity2, Vector2};
+use ggez::nalgebra::{Similarity2, Vector2};
 
 use crate::{game_frame::*, types::*};
 
 use super::tree;
 use crate::{
     portal_graph::render_item_graph,
-    render::{self, draw_map_grid, inventory_bbox, pixel_space_to_tile_space, render_inventory},
+    render::{
+        self, draw_map_grid, inventory_bbox, pixel_space_to_tile_space, render_inventory,
+        DrawBuffer,
+    },
 };
 
 mod planning;
@@ -318,94 +321,50 @@ impl event::EventHandler for GameState {
         let transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
         graphics::clear(ctx, white);
         let frame = self.history.get_focus_val();
-        render::ecs(ctx, &frame.ecs)?;
+        let mut buffer: DrawBuffer = DrawBuffer::new(ctx);
+        render::ecs(&frame.ecs, &mut buffer);
+        buffer.draw(ctx)?;
         draw_map_grid(ctx, black)?;
         // TODO: this should be over entities with positions and plans. IIRC the ECS talk gave some
         // advice on how to structure stuff like this: ideally this would be a "system" that we'd
         // say requires a position and a plan and we'd just pass it a function that takes both,
         // instead of having to do the join ourselves.
-        for (player_id, _) in frame.ecs.players.iter() {
-            if let Some(mv) = self
-                .current_plan
+        for (entity, (mv, position)) in inner_join(
+            self.current_plan
                 .get(&self.history.focus.children)
                 .moves
-                .get(&player_id)
-            {
-                let position = *frame
-                    .ecs
-                    .positions
-                    .get(player_id)
-                    .expect("Player without positon");
-                let (image, rotation) = match *mv {
-                    Move::Direction(ref dir) => {
-                        let angle = match *dir {
-                            Direction::Up => 0.,
-                            Direction::Left => 1.5 * PI,
-                            Direction::Down => PI,
-                            Direction::Right => 0.5 * PI,
-                        };
-                        (&self.image_map.move_arrow, angle)
-                    }
-                    Move::Jump => (&self.image_map.jump_icon, 0.),
-                    Move::PickUp => (&self.image_map.pick_up_icon, 0.),
-                    Move::Drop(_) => (&self.image_map.drop_icon, 0.),
-                };
-                let dest = transform
-                    * (nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(position)
-                        + Vector2::new(0.5, 0.5));
-                image.draw(
-                    ctx,
-                    DrawParam::new()
-                        .dest(dest)
-                        .offset([0.5, 0.5])
-                        .rotation(rotation),
-                )?;
-            }
-            for pt in &self.current_plan.get(&self.history.focus.children).portals {
-                self.image_map.jump_icon.draw(
-                    ctx,
-                    DrawParam::new().dest(
-                        transform
-                            * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
-                                *pt,
-                            ),
-                    ),
-                )?;
-            }
+                .iter()
+                .map(|(&k, &v)| (k, v)),
+            &frame.ecs.positions,
+        ) {
+            let (&image, rotation) = match mv {
+                Move::Direction(ref dir) => {
+                    let angle = match *dir {
+                        Direction::Up => 0.,
+                        Direction::Left => 1.5 * PI,
+                        Direction::Down => PI,
+                        Direction::Right => 0.5 * PI,
+                    };
+                    (&self.image_map.move_arrow, angle)
+                }
+                Move::Jump => (&self.image_map.jump_icon, 0.),
+                Move::PickUp => (&self.image_map.pick_up_icon, 0.),
+                Move::Drop(_) => (&self.image_map.drop_icon, 0.),
+            };
+            buffer.push_rotated(image, *position, rotation);
+        }
+        for pt in &self.current_plan.get(&self.history.focus.children).portals {
+            buffer.push(self.image_map.jump_icon, *pt);
         }
         for (_, portal) in self.history.get_focus_val().portals.iter() {
-            self.image_map.portal.draw(
-                ctx,
-                DrawParam::new().dest(
-                    transform
-                        * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
-                            portal.player_position,
-                        ),
-                ),
-            )?;
+            buffer.push(self.image_map.portal, portal.player_position);
         }
         for (_, item_drop) in self.history.get_focus_val().items.iter() {
-            item_drop.item.image(&self.image_map).draw(
-                ctx,
-                DrawParam::new().dest(
-                    transform
-                        * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
-                            item_drop.position,
-                        ),
-                ),
-            )?;
+            buffer.push(item_drop.item.image(&self.image_map), item_drop.position);
         }
         match self.selected {
             Selection::Top => {}
-            Selection::GridCell(pt) => {
-                self.image_map.selection.draw(
-                    ctx,
-                    DrawParam::new().dest(
-                        transform
-                            * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(pt),
-                    ),
-                )?;
-            }
+            Selection::GridCell(pt) => buffer.push(self.image_map.selection, pt),
             Selection::Player(player_id) | Selection::WishPicker(player_id, _) => {
                 let position = *self
                     .history
@@ -414,15 +373,7 @@ impl event::EventHandler for GameState {
                     .positions
                     .get(player_id)
                     .expect("Missing position for selected player");
-                self.image_map.selection.draw(
-                    ctx,
-                    DrawParam::new().dest(
-                        transform
-                            * nalgebra::convert::<nalgebra::Point2<i32>, nalgebra::Point2<f32>>(
-                                position,
-                            ),
-                    ),
-                )?;
+                buffer.push(self.image_map.selection, position);
             }
             Selection::Inventory(player_id, ref selected_item_option) => {
                 let inventory = self

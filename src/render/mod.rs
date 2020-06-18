@@ -1,15 +1,57 @@
 use std::default::Default;
 
-use self::graphics::Drawable;
 use super::ggez::graphics;
-use graphics::{DrawParam, Mesh};
+use graphics::{DrawParam, Drawable, Mesh};
 
 use self::nalgebra::{Similarity2, Vector2};
 use super::ggez::nalgebra;
 
 use super::types::*;
 
+use enum_map::EnumMap;
+
 type Point2 = ggez::nalgebra::Point2<f32>;
+pub struct DrawBuffer {
+    buffer: EnumMap<Layer, Vec<(DrawRef, DrawParam)>>,
+    transform: Similarity2<f32>,
+}
+impl DrawBuffer {
+    pub fn new(ctx: &ggez::Context) -> Self {
+        let graphics::Rect { x: x0, y: y0, .. } = graphics::screen_coordinates(ctx);
+        let transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
+        DrawBuffer {
+            buffer: EnumMap::new(),
+            transform,
+        }
+    }
+    pub fn push_with_param(&mut self, draw_layer: DrawLayer, param: DrawParam) {
+        self.buffer[draw_layer.layer].push((draw_layer.draw_ref, param));
+    }
+    pub fn push(&mut self, draw_layer: DrawLayer, pt: Point) {
+        let dest = self.tile_space_to_pixel_space(pt);
+        self.push_with_param(draw_layer, DrawParam::new().dest(dest));
+    }
+    pub fn push_rotated(&mut self, draw_layer: DrawLayer, pt: Point, rotation: f32) {
+        let dest = self.transform
+            * (nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt) + Vector2::new(0.5, 0.5));
+        let param = DrawParam::new()
+            .dest(dest)
+            .offset([0.5, 0.5])
+            .rotation(rotation);
+        self.push_with_param(draw_layer, param);
+    }
+    pub fn draw(self, ctx: &mut ggez::Context) -> ggez::GameResult<()> {
+        for (_, layer) in self.buffer {
+            for (image, param) in layer {
+                image.draw(ctx, param)?;
+            }
+        }
+        Ok(())
+    }
+    pub fn tile_space_to_pixel_space(&self, pt: Point) -> Point2 {
+        self.transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt)
+    }
+}
 
 pub fn draw_grid(
     ctx: &mut ggez::Context,
@@ -76,7 +118,7 @@ pub fn tile_space_to_pixel_space(pt: Point, bbox: graphics::Rect) -> Point2 {
 
 pub fn render_inventory(
     inventory: &Inventory,
-    ctx: &mut ggez::Context,
+    buffer: &mut DrawBuffer,
     image_map: &ImageMap,
     selected_item_option: &Option<usize>,
 ) -> ggez::GameResult<()> {
@@ -124,9 +166,8 @@ pub fn render_inventory(
     Ok(())
 }
 
-pub fn ecs(ctx: &mut ggez::Context, ecs: &ECS) -> ggez::GameResult<()> {
-    let bounds = graphics::screen_coordinates(ctx);
-    for (entity, image) in ecs.images.iter() {
+pub fn ecs(ecs: &ECS, buffer: &mut DrawBuffer) {
+    for (entity, (layer, image)) in ecs.images.iter() {
         if !ecs.entities.contains_key(entity) {
             continue;
         }
@@ -134,8 +175,6 @@ pub fn ecs(ctx: &mut ggez::Context, ecs: &ECS) -> ggez::GameResult<()> {
             Some(pt) => *pt,
             None => continue,
         };
-        let pixel_space_pt = tile_space_to_pixel_space(pt, bounds);
-        image.draw(ctx, DrawParam::new().dest(pixel_space_pt))?;
+        buffer.push(image, pt);
     }
-    Ok(())
 }

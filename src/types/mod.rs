@@ -233,45 +233,49 @@ impl Selection {
 }
 
 pub struct ImageMap {
-    pub player: DrawRef,
-    pub selection: DrawRef,
-    pub move_arrow: DrawRef,
-    pub jump_icon: DrawRef,
-    pub pick_up_icon: DrawRef,
-    pub drop_icon: DrawRef,
-    pub portal: DrawRef,
-    pub key: DrawRef,
-    pub wall: DrawRef,
-    pub open_door: DrawRef,
-    pub closed_door: DrawRef,
-    pub plate: DrawRef,
-    pub lights: [DrawRef; 4],
+    pub player: DrawLayer,
+    pub selection: DrawLayer,
+    pub move_arrow: DrawLayer,
+    pub jump_icon: DrawLayer,
+    pub pick_up_icon: DrawLayer,
+    pub drop_icon: DrawLayer,
+    pub portal: DrawLayer,
+    pub key: DrawLayer,
+    pub wall: DrawLayer,
+    pub open_door: DrawLayer,
+    pub closed_door: DrawLayer,
+    pub plate: DrawLayer,
+    pub lights: [DrawLayer; 4],
 }
 
-fn load_image(ctx: &mut ggez::Context, path: &str) -> ggez::GameResult<DrawRef> {
+fn load_image(ctx: &mut ggez::Context, layer: Layer, path: &str) -> ggez::GameResult<DrawLayer> {
     let image = graphics::Image::new(ctx, path)?;
-    Ok(Box::leak(Box::new(image)))
+    Ok(DrawLayer {
+        layer,
+        draw_ref: &*Box::leak(Box::new(image)),
+    })
 }
 
 impl ImageMap {
     pub fn new(ctx: &mut ggez::Context) -> ggez::GameResult<Self> {
-        let player = load_image(ctx, "/images/player.png")?;
-        let selection = load_image(ctx, "/images/selection.png")?;
-        let move_arrow = load_image(ctx, "/images/arrow.png")?;
-        let jump_icon = load_image(ctx, "/images/jump.png")?;
-        let pick_up_icon = load_image(ctx, "/images/pick_up.png")?;
-        let drop_icon = load_image(ctx, "/images/drop.png")?;
-        let portal = load_image(ctx, "/images/portal.png")?;
-        let key = load_image(ctx, "/images/key.png")?;
-        let wall = load_image(ctx, "/images/wall.png")?;
-        let open_door = load_image(ctx, "/images/open_door.png")?;
-        let closed_door = load_image(ctx, "/images/closed_door.png")?;
-        let plate = load_image(ctx, "/images/plate.png")?;
+        use Layer::*;
+        let player = load_image(ctx, Foreground, "/images/player.png")?;
+        let selection = load_image(ctx, UI, "/images/selection.png")?;
+        let move_arrow = load_image(ctx, UI, "/images/arrow.png")?;
+        let jump_icon = load_image(ctx, UI, "/images/jump.png")?;
+        let pick_up_icon = load_image(ctx, UI, "/images/pick_up.png")?;
+        let drop_icon = load_image(ctx, UI, "/images/drop.png")?;
+        let portal = load_image(ctx, UI, "/images/portal.png")?;
+        let key = load_image(ctx, Foreground, "/images/key.png")?;
+        let wall = load_image(ctx, Foreground, "/images/wall.png")?;
+        let open_door = load_image(ctx, Foreground, "/images/open_door.png")?;
+        let closed_door = load_image(ctx, Foreground, "/images/closed_door.png")?;
+        let plate = load_image(ctx, Background, "/images/plate.png")?;
         let lights = [
-            load_image(ctx, "/images/lights0.png")?,
-            load_image(ctx, "/images/lights1.png")?,
-            load_image(ctx, "/images/lights2.png")?,
-            load_image(ctx, "/images/lights3.png")?,
+            load_image(ctx, Foreground, "/images/lights0.png")?,
+            load_image(ctx, Foreground, "/images/lights1.png")?,
+            load_image(ctx, Foreground, "/images/lights2.png")?,
+            load_image(ctx, Foreground, "/images/lights3.png")?,
         ];
         Ok(ImageMap {
             player,
@@ -290,7 +294,10 @@ impl ImageMap {
         })
     }
     pub fn mock() -> Self {
-        let empty_image = Box::leak(Box::new(EmptyImage {}));
+        let empty_image = DrawLayer {
+            layer: Layer::Background,
+            draw_ref: &*Box::leak(Box::new(EmptyImage {})),
+        };
         ImageMap {
             player: empty_image,
             selection: empty_image,
@@ -805,7 +812,7 @@ pub enum Item {
 }
 
 impl Item {
-    pub fn image(&self, image_map: &ImageMap) -> DrawRef {
+    pub fn image(&self, image_map: &ImageMap) -> DrawLayer {
         match *self {
             Item::Key(ref key) => key.image(image_map),
         }
@@ -816,7 +823,7 @@ impl Item {
 pub struct Key {}
 
 impl Key {
-    pub fn image(&self, image_map: &ImageMap) -> DrawRef {
+    pub fn image(&self, image_map: &ImageMap) -> DrawLayer {
         image_map.key
     }
 }
@@ -856,7 +863,7 @@ pub enum MapElement {
     },
 }
 impl MapElement {
-    pub fn image(&self, image_map: &ImageMap) -> Option<DrawRef> {
+    pub fn image(&self, image_map: &ImageMap) -> Option<DrawLayer> {
         match self {
             MapElement::Empty => None,
             MapElement::Wall => Some(image_map.wall),
@@ -1031,7 +1038,7 @@ pub struct ECS {
     // TODO: leak ImageMap at launch, then stick a reference to it in every ECS so an ECS can
     // insert things itself.
     pub entities: HopSlotMap<Entity, ()>,
-    pub images: Components<DrawRef>,
+    pub images: Components<DrawLayer>,
     pub positions: Components<Point>,
     pub event_listeners: Components<Vec<EventListener>>,
     pub disabled_event_groups: Components<EnumSet<Group>>,
@@ -1096,6 +1103,11 @@ pub trait DrawDebug: graphics::Drawable + std::fmt::Debug {}
 impl<T> DrawDebug for T where T: graphics::Drawable + std::fmt::Debug {}
 
 pub type DrawRef = &'static dyn DrawDebug;
+#[derive(Clone, Copy, Debug)]
+pub struct DrawLayer {
+    pub layer: Layer,
+    pub draw_ref: DrawRef,
+}
 
 pub trait CloneFn<A, B>: objekt::Clone + Fn(A) -> B {}
 objekt::clone_trait_object!(<A,B>CloneFn<A,B>);
@@ -1134,7 +1146,7 @@ pub enum Action {
     Reject(&'static str),
     SetImage {
         target: Entity,
-        img: DrawRef,
+        img: DrawLayer,
     },
     EnableGroup(Entity, Group),
     DisableGroup(Entity, Group),
@@ -1157,6 +1169,13 @@ pub enum EventTriggerModifier {
 pub enum Priority {
     Main,
     Cleanup,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Enum)]
+pub enum Layer {
+    Background,
+    Foreground,
+    UI,
 }
 
 #[derive(Debug, EnumSetType)]
