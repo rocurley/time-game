@@ -318,7 +318,7 @@ pub fn apply_plan(
                 .positions
                 .get(entity)
                 .and_then(|&pos| player_at(&out.ecs, pos))
-                .is_some(),
+                .map_or(false, |id| id != entity),
             EventTrigger::PlayerNotIntersect => out
                 .ecs
                 .positions

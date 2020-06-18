@@ -1058,6 +1058,13 @@ impl ECS {
                 movement_type: MovementType::PlayerControlled,
             },
         );
+        self.event_listeners.insert(
+            player,
+            vec![EventListener::new(
+                EventTrigger::PlayerIntersect,
+                Action::Reject("impassible"),
+            )],
+        );
         player
     }
     pub fn verify(&self) {
