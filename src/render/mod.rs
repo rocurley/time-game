@@ -5,23 +5,39 @@ use graphics::{DrawParam, Drawable, Mesh};
 
 use self::nalgebra::{Similarity2, Vector2};
 use super::ggez::nalgebra;
+extern crate alga;
+use alga::general::SubsetOf;
 
 use super::types::*;
 
 use enum_map::EnumMap;
 
+struct BufferedDraw {
+    image: DrawRef,
+    position: Point2,
+    param: DrawParam,
+}
+
+impl BufferedDraw {
+    fn draw(self, ctx: &mut ggez::Context, transform: Similarity2<f32>) -> ggez::GameResult<()> {
+        let dest = transform * self.position;
+        image.draw(ctx, self.param.dest(dest))
+    }
+}
+
 type Point2 = ggez::nalgebra::Point2<f32>;
 pub struct DrawBuffer {
     buffer: EnumMap<Layer, Vec<(DrawRef, DrawParam)>>,
-    transform: Similarity2<f32>,
+    world_transform: Similarity2<f32>,
+    inventory_transform: Similarity2<f32>,
 }
 impl DrawBuffer {
     pub fn new(ctx: &ggez::Context) -> Self {
         let graphics::Rect { x: x0, y: y0, .. } = graphics::screen_coordinates(ctx);
-        let transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
+        let world_transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
         DrawBuffer {
             buffer: EnumMap::new(),
-            transform,
+            world_transform,
         }
     }
     pub fn push_with_param(&mut self, draw_layer: DrawLayer, param: DrawParam) {
@@ -32,7 +48,7 @@ impl DrawBuffer {
         self.push_with_param(draw_layer, DrawParam::new().dest(dest));
     }
     pub fn push_rotated(&mut self, draw_layer: DrawLayer, pt: Point, rotation: f32) {
-        let dest = self.transform
+        let dest = self.world_transform
             * (nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt) + Vector2::new(0.5, 0.5));
         let param = DrawParam::new()
             .dest(dest)
@@ -48,8 +64,13 @@ impl DrawBuffer {
         }
         Ok(())
     }
-    pub fn tile_space_to_pixel_space(&self, pt: Point) -> Point2 {
-        self.transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt)
+    pub fn tile_space_to_pixel_space(&self, layer: Layer, pt: Point) -> Point2 {
+        let transform = match layer {
+            Background => self.world_transform,
+            Foreground => self.world_transform,
+            UI => Similarity2::identity(),
+        };
+        transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt)
     }
 }
 
@@ -110,10 +131,10 @@ pub fn pixel_space_to_tile_space(pt: Point2, bbox: ggez::graphics::Rect) -> Opti
     Some(nalgebra::try_convert::<Point2, nalgebra::Point2<i32>>(inv_transform * pt).unwrap())
 }
 
-pub fn tile_space_to_pixel_space(pt: Point, bbox: graphics::Rect) -> Point2 {
+pub fn tile_space_to_pixel_space<P: SubsetOf<Point2>>(pt: P, bbox: graphics::Rect) -> Point2 {
     let graphics::Rect { x: x0, y: y0, .. } = bbox;
-    let transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
-    transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt)
+    let world_transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
+    world_transform * nalgebra::convert::<P, Point2>(pt)
 }
 
 pub fn render_inventory(
