@@ -1,4 +1,3 @@
-#![feature(specialization)]
 #![feature(nll)]
 #![warn(clippy::all)]
 #![allow(clippy::try_err)]

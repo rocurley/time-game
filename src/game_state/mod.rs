@@ -383,7 +383,12 @@ impl event::EventHandler for GameState {
                     .players
                     .get(player_id)
                     .expect("Invalid inventory player");
-                render_inventory(inventory, ctx, &self.image_map, selected_item_option)?;
+                render_inventory(
+                    inventory,
+                    &mut buffer,
+                    &self.image_map,
+                    selected_item_option,
+                )?;
             }
             Selection::WishPickerInventoryViewer(_player_id, _ix, target_player_id) => {
                 let inventory = self
@@ -393,7 +398,7 @@ impl event::EventHandler for GameState {
                     .players
                     .get(target_player_id)
                     .expect("Invalid inventory player");
-                render_inventory(inventory, ctx, &self.image_map, &None)?;
+                render_inventory(inventory, &mut buffer, &self.image_map, &None)?;
             }
         }
         graphics::present(ctx)

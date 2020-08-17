@@ -199,9 +199,9 @@ pub fn render_inventory(
             buffer.push(
                 DrawLayer {
                     layer: Layer::Inventory,
-                    draw_ref: text,
+                    draw_ref: text.into(),
                 },
-                tile_space_pt + Vector2::new(0.2, 0.2),
+                nalgebra::convert::<_, Point2>(tile_space_pt) + Vector2::new(0.2, 0.2),
             );
         }
     }
@@ -210,16 +210,15 @@ pub fn render_inventory(
             i as i32 % INVENTORY_WIDTH as i32,
             i as i32 / INVENTORY_WIDTH as i32,
         );
-        let pixel_space_pt = tile_space_to_pixel_space(tile_space_pt, bounds);
-        image_map
-            .selection
-            .draw(ctx, DrawParam::new().dest(pixel_space_pt))?;
+        let mut image = image_map.selection;
+        image.layer = Layer::Inventory;
+        buffer.push(image, tile_space_pt);
     }
     Ok(())
 }
 
 pub fn ecs(ecs: &ECS, buffer: &mut DrawBuffer) {
-    for (entity, (layer, image)) in ecs.images.iter() {
+    for (entity, draw_layer) in ecs.images.iter() {
         if !ecs.entities.contains_key(entity) {
             continue;
         }
@@ -227,6 +226,6 @@ pub fn ecs(ecs: &ECS, buffer: &mut DrawBuffer) {
             Some(pt) => *pt,
             None => continue,
         };
-        buffer.push(image, pt);
+        buffer.push(draw_layer.clone(), pt);
     }
 }

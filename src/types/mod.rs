@@ -253,7 +253,7 @@ fn load_image(ctx: &mut ggez::Context, layer: Layer, path: &str) -> ggez::GameRe
     let image = graphics::Image::new(ctx, path)?;
     Ok(DrawLayer {
         layer,
-        draw_ref: &*Box::leak(Box::new(image)),
+        draw_ref: TGDrawable::Borrowed(&*Box::leak(Box::new(image))),
     })
 }
 
@@ -297,7 +297,7 @@ impl ImageMap {
     pub fn mock() -> Self {
         let empty_image = DrawLayer {
             layer: Layer::Background,
-            draw_ref: &*Box::leak(Box::new(EmptyImage {})),
+            draw_ref: TGDrawable::Borrowed(&*Box::leak(Box::new(EmptyImage {}))),
         };
         ImageMap {
             player: empty_image,
@@ -1114,36 +1114,31 @@ pub enum TGDrawable {
 }
 
 impl<T: DrawDebugClone> std::convert::From<T> for TGDrawable {
-    default fn from(d: T) -> Self {
+    fn from(d: T) -> Self {
         TGDrawable::Owned(Box::new(d))
     }
 }
 
-impl<T: DrawDebug> std::convert::From<&'static T> for TGDrawable {
-    fn from(d: T) -> Self {
-        TGDrawable::Borrowed(d)
-    }
-}
 impl TGDrawable {
-    fn draw(&self, ctx: &mut Context, params: graphics::DrawParam) -> ggez::GameResult<()> {
+    pub fn draw(&self, ctx: &mut Context, params: graphics::DrawParam) -> ggez::GameResult<()> {
         match self {
             TGDrawable::Owned(b) => b.draw(ctx, params),
             TGDrawable::Borrowed(r) => r.draw(ctx, params),
         }
     }
-    fn dimensions(&self, ctx: &mut Context) -> Option<graphics::Rect> {
+    pub fn dimensions(&self, ctx: &mut Context) -> Option<graphics::Rect> {
         match self {
             TGDrawable::Owned(b) => b.dimensions(ctx),
             TGDrawable::Borrowed(r) => r.dimensions(ctx),
         }
     }
-    fn set_blend_mode(&mut self, mode: Option<graphics::BlendMode>) {
+    pub fn set_blend_mode(&mut self, mode: Option<graphics::BlendMode>) {
         match self {
             TGDrawable::Owned(b) => b.set_blend_mode(mode),
             TGDrawable::Borrowed(r) => r.set_blend_mode(mode),
         }
     }
-    fn blend_mode(&self) -> Option<graphics::BlendMode> {
+    pub fn blend_mode(&self) -> Option<graphics::BlendMode> {
         match self {
             TGDrawable::Owned(b) => b.blend_mode(),
             TGDrawable::Borrowed(r) => r.blend_mode(),
