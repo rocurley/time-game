@@ -13,7 +13,7 @@ use super::types::*;
 use enum_map::EnumMap;
 
 struct BufferedDraw {
-    image: DrawRef,
+    draw_ref: TGDrawable,
     position: Point2,
     param: DrawParam,
 }
@@ -21,15 +21,14 @@ struct BufferedDraw {
 impl BufferedDraw {
     fn draw(self, ctx: &mut ggez::Context, transform: Similarity2<f32>) -> ggez::GameResult<()> {
         let dest = transform * self.position;
-        image.draw(ctx, self.param.dest(dest))
+        self.draw_ref.draw(ctx, self.param.dest(dest))
     }
 }
 
 type Point2 = ggez::nalgebra::Point2<f32>;
 pub struct DrawBuffer {
-    buffer: EnumMap<Layer, Vec<(DrawRef, DrawParam)>>,
+    buffer: EnumMap<Layer, Vec<BufferedDraw>>,
     world_transform: Similarity2<f32>,
-    inventory_transform: Similarity2<f32>,
 }
 impl DrawBuffer {
     pub fn new(ctx: &ggez::Context) -> Self {
@@ -40,26 +39,55 @@ impl DrawBuffer {
             world_transform,
         }
     }
-    pub fn push_with_param(&mut self, draw_layer: DrawLayer, param: DrawParam) {
-        self.buffer[draw_layer.layer].push((draw_layer.draw_ref, param));
+    pub fn push_with_param<P: SubsetOf<Point2>>(
+        &mut self,
+        draw_layer: DrawLayer,
+        param: DrawParam,
+        pt: P,
+    ) {
+        let DrawLayer { draw_ref, layer } = draw_layer;
+        let position = nalgebra::convert::<P, Point2>(pt);
+        let draw = BufferedDraw {
+            draw_ref,
+            position,
+            param,
+        };
+        self.buffer[layer].push(draw);
     }
-    pub fn push(&mut self, draw_layer: DrawLayer, pt: Point) {
-        let dest = self.tile_space_to_pixel_space(pt);
-        self.push_with_param(draw_layer, DrawParam::new().dest(dest));
+    pub fn push<P: SubsetOf<Point2>>(&mut self, draw_layer: DrawLayer, pt: P) {
+        let DrawLayer { draw_ref, layer } = draw_layer;
+        let position = nalgebra::convert::<P, Point2>(pt);
+        let draw = BufferedDraw {
+            draw_ref,
+            position,
+            param: DrawParam::new(),
+        };
+        self.buffer[layer].push(draw);
     }
-    pub fn push_rotated(&mut self, draw_layer: DrawLayer, pt: Point, rotation: f32) {
-        let dest = self.world_transform
-            * (nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt) + Vector2::new(0.5, 0.5));
-        let param = DrawParam::new()
-            .dest(dest)
-            .offset([0.5, 0.5])
-            .rotation(rotation);
-        self.push_with_param(draw_layer, param);
+    pub fn push_rotated<P: SubsetOf<Point2>>(
+        &mut self,
+        draw_layer: DrawLayer,
+        pt: P,
+        rotation: f32,
+    ) {
+        let position = nalgebra::convert::<P, Point2>(pt) + Vector2::new(0.5, 0.5);
+        let param = DrawParam::new().offset([0.5, 0.5]).rotation(rotation);
+        self.push_with_param(draw_layer, param, position);
     }
     pub fn draw(self, ctx: &mut ggez::Context) -> ggez::GameResult<()> {
-        for (_, layer) in self.buffer {
-            for (image, param) in layer {
-                image.draw(ctx, param)?;
+        for (layer, images) in self.buffer {
+            let transform = match layer {
+                Background => self.world_transform,
+                Foreground => self.world_transform,
+                UI => Similarity2::identity(),
+            };
+            for BufferedDraw {
+                draw_ref,
+                position,
+                param,
+            } in images
+            {
+                draw_ref.draw(ctx, param.dest(transform * position))?;
             }
         }
         Ok(())
@@ -143,6 +171,7 @@ pub fn render_inventory(
     image_map: &ImageMap,
     selected_item_option: &Option<usize>,
 ) -> ggez::GameResult<()> {
+    /*
     let bounds = inventory_bbox(ctx);
     let background = match *inventory {
         Inventory::Actual(_) => graphics::Color::from_rgb(127, 127, 127),
@@ -156,22 +185,24 @@ pub fn render_inventory(
     )?
     .draw(ctx, DrawParam::new())?;
     draw_grid(ctx, bounds, (0, 0, 0).into())?;
+    */
     for (i, inventory_cell_option) in inventory.cells().iter().enumerate() {
         for inventory_cell in inventory_cell_option.iter() {
             let tile_space_pt = Point::new(
                 i as i32 % INVENTORY_WIDTH as i32,
                 i as i32 / INVENTORY_WIDTH as i32,
             );
-            let pixel_space_pt = tile_space_to_pixel_space(tile_space_pt, bounds);
-            inventory_cell
-                .item
-                .image(image_map)
-                .draw(ctx, DrawParam::new().dest(pixel_space_pt))?;
+            let mut draw_ref = inventory_cell.item.image(image_map);
+            draw_ref.layer = Layer::Inventory;
+            buffer.push(draw_ref, tile_space_pt);
             let text = graphics::Text::new(inventory_cell.count.to_string());
-            text.draw(
-                ctx,
-                DrawParam::new().dest(pixel_space_pt + Vector2::new(5., 5.)),
-            )?;
+            buffer.push(
+                DrawLayer {
+                    layer: Layer::Inventory,
+                    draw_ref: text,
+                },
+                tile_space_pt + Vector2::new(0.2, 0.2),
+            );
         }
     }
     for &i in selected_item_option {

@@ -1,4 +1,5 @@
-use super::ggez::{graphics, nalgebra};
+use super::ggez::{graphics, nalgebra, Context};
+use dyn_clone::DynClone;
 use enum_map::EnumMap;
 use enumset::EnumSet;
 use slotmap::{HopSlotMap, SecondaryMap, SparseSecondaryMap};
@@ -1102,15 +1103,87 @@ pub fn inner_join<I: Iterator<Item = (Entity, T1)>, T1, T2>(
 pub trait DrawDebug: graphics::Drawable + std::fmt::Debug {}
 impl<T> DrawDebug for T where T: graphics::Drawable + std::fmt::Debug {}
 
-pub type DrawRef = &'static dyn DrawDebug;
-#[derive(Clone, Copy, Debug)]
-pub struct DrawLayer {
-    pub layer: Layer,
-    pub draw_ref: DrawRef,
+pub trait DrawDebugClone: DrawDebug + DynClone {}
+impl<T> DrawDebugClone for T where T: DrawDebug + Clone {}
+dyn_clone::clone_trait_object!(DrawDebugClone);
+
+#[derive(Debug, Clone)]
+pub enum TGDrawable {
+    Owned(Box<dyn DrawDebugClone>),
+    Borrowed(&'static dyn DrawDebug),
 }
 
-pub trait CloneFn<A, B>: objekt::Clone + Fn(A) -> B {}
-objekt::clone_trait_object!(<A,B>CloneFn<A,B>);
+impl<T: DrawDebugClone> std::convert::From<T> for TGDrawable {
+    default fn from(d: T) -> Self {
+        TGDrawable::Owned(Box::new(d))
+    }
+}
+
+impl<T: DrawDebug> std::convert::From<&'static T> for TGDrawable {
+    fn from(d: T) -> Self {
+        TGDrawable::Borrowed(d)
+    }
+}
+impl TGDrawable {
+    fn draw(&self, ctx: &mut Context, params: graphics::DrawParam) -> ggez::GameResult<()> {
+        match self {
+            TGDrawable::Owned(b) => b.draw(ctx, params),
+            TGDrawable::Borrowed(r) => r.draw(ctx, params),
+        }
+    }
+    fn dimensions(&self, ctx: &mut Context) -> Option<graphics::Rect> {
+        match self {
+            TGDrawable::Owned(b) => b.dimensions(ctx),
+            TGDrawable::Borrowed(r) => r.dimensions(ctx),
+        }
+    }
+    fn set_blend_mode(&mut self, mode: Option<graphics::BlendMode>) {
+        match self {
+            TGDrawable::Owned(b) => b.set_blend_mode(mode),
+            TGDrawable::Borrowed(r) => r.set_blend_mode(mode),
+        }
+    }
+    fn blend_mode(&self) -> Option<graphics::BlendMode> {
+        match self {
+            TGDrawable::Owned(b) => b.blend_mode(),
+            TGDrawable::Borrowed(r) => r.blend_mode(),
+        }
+    }
+}
+/*
+impl graphics::Drawable for TGDrawable {
+    fn draw(&self, ctx: &mut Context, params: graphics::DrawParam) -> ggez::GameResult<()> {
+        match self {
+            TGDrawable::Owned(b) => b.draw(ctx, params),
+            TGDrawable::Borrowed(r) => r.draw(ctx, params),
+        }
+    }
+    fn dimensions(&self, ctx: &mut Context) -> Option<graphics::Rect> {
+        match self {
+            TGDrawable::Owned(b) => b.dimensions(ctx),
+            TGDrawable::Borrowed(r) => r.dimensions(ctx),
+        }
+    }
+    fn set_blend_mode(&mut self, mode: Option<graphics::BlendMode>) {
+        match self {
+            TGDrawable::Owned(b) => b.set_blend_mode(mode),
+            TGDrawable::Borrowed(r) => r.set_blend_mode(mode),
+        }
+    }
+    fn blend_mode(&self) -> Option<graphics::BlendMode> {
+        match self {
+            TGDrawable::Owned(b) => b.blend_mode(),
+            TGDrawable::Borrowed(r) => r.blend_mode(),
+        }
+    }
+}
+*/
+
+#[derive(Debug, Clone)]
+pub struct DrawLayer {
+    pub layer: Layer,
+    pub draw_ref: TGDrawable,
+}
 
 // TODO: consider type-level shenanigans to prevent composing an Action that requires an input the
 // EventTrigger can't provide.
@@ -1176,6 +1249,7 @@ pub enum Layer {
     Background,
     Foreground,
     UI,
+    Inventory,
 }
 
 #[derive(Debug, EnumSetType)]

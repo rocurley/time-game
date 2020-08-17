@@ -1,3 +1,4 @@
+#![feature(specialization)]
 #![feature(nll)]
 #![warn(clippy::all)]
 #![allow(clippy::try_err)]
@@ -12,7 +13,7 @@ extern crate rand;
 extern crate slotmap;
 #[macro_use]
 extern crate derivative;
-extern crate objekt;
+extern crate dyn_clone;
 #[macro_use]
 extern crate enum_map;
 #[macro_use]
