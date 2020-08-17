@@ -261,12 +261,12 @@ impl ImageMap {
     pub fn new(ctx: &mut ggez::Context) -> ggez::GameResult<Self> {
         use Layer::*;
         let player = load_image(ctx, Foreground, "/images/player.png")?;
-        let selection = load_image(ctx, UI, "/images/selection.png")?;
-        let move_arrow = load_image(ctx, UI, "/images/arrow.png")?;
-        let jump_icon = load_image(ctx, UI, "/images/jump.png")?;
-        let pick_up_icon = load_image(ctx, UI, "/images/pick_up.png")?;
-        let drop_icon = load_image(ctx, UI, "/images/drop.png")?;
-        let portal = load_image(ctx, UI, "/images/portal.png")?;
+        let selection = load_image(ctx, Foreground, "/images/selection.png")?;
+        let move_arrow = load_image(ctx, Foreground, "/images/arrow.png")?;
+        let jump_icon = load_image(ctx, Foreground, "/images/jump.png")?;
+        let pick_up_icon = load_image(ctx, Foreground, "/images/pick_up.png")?;
+        let drop_icon = load_image(ctx, Foreground, "/images/drop.png")?;
+        let portal = load_image(ctx, Foreground, "/images/portal.png")?;
         let key = load_image(ctx, Foreground, "/images/key.png")?;
         let wall = load_image(ctx, Foreground, "/images/wall.png")?;
         let open_door = load_image(ctx, Foreground, "/images/open_door.png")?;
@@ -300,19 +300,24 @@ impl ImageMap {
             draw_ref: TGDrawable::Borrowed(&*Box::leak(Box::new(EmptyImage {}))),
         };
         ImageMap {
-            player: empty_image,
-            selection: empty_image,
-            move_arrow: empty_image,
-            jump_icon: empty_image,
-            pick_up_icon: empty_image,
-            drop_icon: empty_image,
-            portal: empty_image,
-            key: empty_image,
-            wall: empty_image,
-            open_door: empty_image,
-            closed_door: empty_image,
-            plate: empty_image,
-            lights: [empty_image; 4],
+            player: empty_image.clone(),
+            selection: empty_image.clone(),
+            move_arrow: empty_image.clone(),
+            jump_icon: empty_image.clone(),
+            pick_up_icon: empty_image.clone(),
+            drop_icon: empty_image.clone(),
+            portal: empty_image.clone(),
+            key: empty_image.clone(),
+            wall: empty_image.clone(),
+            open_door: empty_image.clone(),
+            closed_door: empty_image.clone(),
+            plate: empty_image.clone(),
+            lights: [
+                empty_image.clone(),
+                empty_image.clone(),
+                empty_image.clone(),
+                empty_image.clone(),
+            ],
         }
     }
 }
@@ -825,7 +830,7 @@ pub struct Key {}
 
 impl Key {
     pub fn image(&self, image_map: &ImageMap) -> DrawLayer {
-        image_map.key
+        image_map.key.clone()
     }
 }
 
@@ -867,12 +872,12 @@ impl MapElement {
     pub fn image(&self, image_map: &ImageMap) -> Option<DrawLayer> {
         match self {
             MapElement::Empty => None,
-            MapElement::Wall => Some(image_map.wall),
-            MapElement::ClosedDoor | MapElement::RemoteDoor => Some(image_map.closed_door),
-            MapElement::OpenDoor => Some(image_map.open_door),
-            MapElement::Plate(_, _) => Some(image_map.plate),
-            MapElement::Light { .. } => Some(image_map.lights[0]),
-            MapElement::MovingWall { .. } => Some(image_map.wall),
+            MapElement::Wall => Some(image_map.wall.clone()),
+            MapElement::ClosedDoor | MapElement::RemoteDoor => Some(image_map.closed_door.clone()),
+            MapElement::OpenDoor => Some(image_map.open_door.clone()),
+            MapElement::Plate(_, _) => Some(image_map.plate.clone()),
+            MapElement::Light { .. } => Some(image_map.lights[0].clone()),
+            MapElement::MovingWall { .. } => Some(image_map.wall.clone()),
         }
     }
     pub fn passable(&self) -> bool {
@@ -903,7 +908,7 @@ impl MapElement {
                             Action::PlayerMarkUsed(Item::Key(Key {}), 1),
                             Action::SetImage {
                                 target: e,
-                                img: image_map.open_door,
+                                img: image_map.open_door.clone(),
                             },
                             Action::DisableGroup(e, Group::Locked),
                         ]),
@@ -940,7 +945,7 @@ impl MapElement {
                         ),
                         Action::SetImage {
                             target: e,
-                            img: image_map.lights[i as usize],
+                            img: image_map.lights[i as usize].clone(),
                         },
                     )
                     .with_priority(Priority::Cleanup)
@@ -1058,7 +1063,7 @@ impl ECS {
         let player = self.entities.insert(());
         self.players.insert(player, inventory);
         self.positions.insert(player, pos);
-        self.images.insert(player, image_map.player);
+        self.images.insert(player, image_map.player.clone());
         self.movement.insert(
             player,
             Movement {
@@ -1113,7 +1118,7 @@ pub enum TGDrawable {
     Borrowed(&'static dyn DrawDebug),
 }
 
-impl<T: DrawDebugClone> std::convert::From<T> for TGDrawable {
+impl<T: DrawDebugClone + 'static> std::convert::From<T> for TGDrawable {
     fn from(d: T) -> Self {
         TGDrawable::Owned(Box::new(d))
     }
@@ -1130,18 +1135,6 @@ impl TGDrawable {
         match self {
             TGDrawable::Owned(b) => b.dimensions(ctx),
             TGDrawable::Borrowed(r) => r.dimensions(ctx),
-        }
-    }
-    pub fn set_blend_mode(&mut self, mode: Option<graphics::BlendMode>) {
-        match self {
-            TGDrawable::Owned(b) => b.set_blend_mode(mode),
-            TGDrawable::Borrowed(r) => r.set_blend_mode(mode),
-        }
-    }
-    pub fn blend_mode(&self) -> Option<graphics::BlendMode> {
-        match self {
-            TGDrawable::Owned(b) => b.blend_mode(),
-            TGDrawable::Borrowed(r) => r.blend_mode(),
         }
     }
 }

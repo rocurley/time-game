@@ -18,17 +18,14 @@ struct BufferedDraw {
     param: DrawParam,
 }
 
-impl BufferedDraw {
-    fn draw(self, ctx: &mut ggez::Context, transform: Similarity2<f32>) -> ggez::GameResult<()> {
-        let dest = transform * self.position;
-        self.draw_ref.draw(ctx, self.param.dest(dest))
-    }
-}
-
 type Point2 = ggez::nalgebra::Point2<f32>;
 pub struct DrawBuffer {
     buffer: EnumMap<Layer, Vec<BufferedDraw>>,
     world_transform: Similarity2<f32>,
+}
+fn inventory_transform(ctx: &ggez::Context) -> Similarity2<f32> {
+    let graphics::Rect { x: x0, y: y0, .. } = inventory_bbox(ctx);
+    Similarity2::new(Vector2::new(x0, y0), 0., SCALE)
 }
 impl DrawBuffer {
     pub fn new(ctx: &ggez::Context) -> Self {
@@ -75,11 +72,13 @@ impl DrawBuffer {
         self.push_with_param(draw_layer, param, position);
     }
     pub fn draw(self, ctx: &mut ggez::Context) -> ggez::GameResult<()> {
+        let inventory_transform = inventory_transform(ctx);
         for (layer, images) in self.buffer {
             let transform = match layer {
-                Background => self.world_transform,
-                Foreground => self.world_transform,
-                UI => Similarity2::identity(),
+                Layer::Background => self.world_transform,
+                Layer::Foreground => self.world_transform,
+                Layer::UI => Similarity2::identity(),
+                Layer::Inventory => inventory_transform,
             };
             for BufferedDraw {
                 draw_ref,
@@ -91,14 +90,6 @@ impl DrawBuffer {
             }
         }
         Ok(())
-    }
-    pub fn tile_space_to_pixel_space(&self, layer: Layer, pt: Point) -> Point2 {
-        let transform = match layer {
-            Background => self.world_transform,
-            Foreground => self.world_transform,
-            UI => Similarity2::identity(),
-        };
-        transform * nalgebra::convert::<nalgebra::Point2<i32>, Point2>(pt)
     }
 }
 
@@ -159,12 +150,6 @@ pub fn pixel_space_to_tile_space(pt: Point2, bbox: ggez::graphics::Rect) -> Opti
     Some(nalgebra::try_convert::<Point2, nalgebra::Point2<i32>>(inv_transform * pt).unwrap())
 }
 
-pub fn tile_space_to_pixel_space<P: SubsetOf<Point2>>(pt: P, bbox: graphics::Rect) -> Point2 {
-    let graphics::Rect { x: x0, y: y0, .. } = bbox;
-    let world_transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
-    world_transform * nalgebra::convert::<P, Point2>(pt)
-}
-
 pub fn render_inventory(
     inventory: &Inventory,
     buffer: &mut DrawBuffer,
@@ -210,7 +195,7 @@ pub fn render_inventory(
             i as i32 % INVENTORY_WIDTH as i32,
             i as i32 / INVENTORY_WIDTH as i32,
         );
-        let mut image = image_map.selection;
+        let mut image = image_map.selection.clone();
         image.layer = Layer::Inventory;
         buffer.push(image, tile_space_pt);
     }

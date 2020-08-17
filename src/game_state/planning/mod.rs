@@ -409,7 +409,7 @@ pub fn apply_plan(
                     };
                 }
                 Action::SetImage { target, img } => {
-                    out.ecs.images.insert(*target, *img);
+                    out.ecs.images.insert(*target, img.clone());
                 }
                 Action::SetPosition { target, position } => {
                     out.ecs.positions.insert(*target, *position);
