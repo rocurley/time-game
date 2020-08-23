@@ -319,7 +319,7 @@ impl event::EventHandler for GameState {
         let white: Color = (255, 255, 255).into();
         graphics::clear(ctx, white);
         let frame = self.history.get_focus_val();
-        let mut buffer: DrawBuffer = DrawBuffer::new(ctx);
+        let mut buffer: DrawBuffer = DrawBuffer::new(ctx)?;
         render::ecs(&frame.ecs, &mut buffer);
         draw_map_grid(ctx, black)?;
         // TODO: this should be over entities with positions and plans. IIRC the ECS talk gave some
@@ -398,7 +398,7 @@ impl event::EventHandler for GameState {
                 render_inventory(inventory, &mut buffer, &self.image_map, &None)?;
             }
         }
-        buffer.draw(ctx)?;
+        buffer.execute()?;
         graphics::present(ctx)
     }
 }

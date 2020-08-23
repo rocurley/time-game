@@ -1,7 +1,7 @@
 use std::default::Default;
 
 use super::ggez::graphics;
-use graphics::{DrawParam, Drawable, Mesh};
+use graphics::{Canvas, DrawParam, Drawable, Mesh};
 
 use self::nalgebra::{Similarity2, Vector2};
 use super::ggez::nalgebra;
@@ -19,22 +19,54 @@ struct BufferedDraw {
 }
 
 type Point2 = ggez::nalgebra::Point2<f32>;
-pub struct DrawBuffer {
-    buffer: EnumMap<Layer, Vec<BufferedDraw>>,
+pub struct DrawBuffer<'a> {
+    ctx: &'a mut ggez::Context,
+    layers: EnumMap<Layer, Canvas>,
     world_transform: Similarity2<f32>,
+    inventory_transform: Similarity2<f32>,
 }
 fn inventory_transform(ctx: &ggez::Context) -> Similarity2<f32> {
     let graphics::Rect { x: x0, y: y0, .. } = inventory_bbox(ctx);
     Similarity2::new(Vector2::new(x0, y0), 0., SCALE)
 }
-impl DrawBuffer {
-    pub fn new(ctx: &ggez::Context) -> Self {
+impl<'a> DrawBuffer<'a> {
+    pub fn new(ctx: &'a mut ggez::Context) -> ggez::GameResult<Self> {
         let graphics::Rect { x: x0, y: y0, .. } = graphics::screen_coordinates(ctx);
         let world_transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
-        DrawBuffer {
-            buffer: EnumMap::new(),
+        let inventory_transform = inventory_transform(ctx);
+        let layer_0 = Canvas::with_window_size(ctx)?;
+        let layer_1 = Canvas::with_window_size(ctx)?;
+        let layer_2 = Canvas::with_window_size(ctx)?;
+        let layer_3 = Canvas::with_window_size(ctx)?;
+        let layers = enum_map! {
+                Layer::Background => layer_0,
+                Layer::Foreground => layer_1,
+                Layer::UI => layer_2,
+                Layer::Inventory => layer_3,
+        };
+        Ok(DrawBuffer {
+            ctx,
+            layers,
             world_transform,
-        }
+            inventory_transform,
+        })
+    }
+    fn draw(&mut self, layer: Layer, draw: BufferedDraw) -> ggez::GameResult<()> {
+        let BufferedDraw {
+            draw_ref,
+            position,
+            param,
+        } = draw;
+        let transform = match layer {
+            Layer::Background => self.world_transform,
+            Layer::Foreground => self.world_transform,
+            Layer::UI => Similarity2::identity(),
+            Layer::Inventory => self.inventory_transform,
+        };
+        graphics::set_canvas(self.ctx, Some(&self.layers[layer]));
+        draw_ref.draw(self.ctx, param.dest(transform * position))?;
+        graphics::set_canvas(self.ctx, None);
+        Ok(())
     }
     pub fn push_with_param<P: SubsetOf<Point2>>(
         &mut self,
@@ -49,7 +81,7 @@ impl DrawBuffer {
             position,
             param,
         };
-        self.buffer[layer].push(draw);
+        self.draw(layer, draw);
     }
     pub fn push<P: SubsetOf<Point2>>(&mut self, draw_layer: DrawLayer, pt: P) {
         let DrawLayer { draw_ref, layer } = draw_layer;
@@ -59,7 +91,7 @@ impl DrawBuffer {
             position,
             param: DrawParam::new(),
         };
-        self.buffer[layer].push(draw);
+        self.draw(layer, draw);
     }
     pub fn push_rotated<P: SubsetOf<Point2>>(
         &mut self,
@@ -71,23 +103,9 @@ impl DrawBuffer {
         let param = DrawParam::new().offset([0.5, 0.5]).rotation(rotation);
         self.push_with_param(draw_layer, param, position);
     }
-    pub fn draw(self, ctx: &mut ggez::Context) -> ggez::GameResult<()> {
-        let inventory_transform = inventory_transform(ctx);
-        for (layer, images) in self.buffer {
-            let transform = match layer {
-                Layer::Background => self.world_transform,
-                Layer::Foreground => self.world_transform,
-                Layer::UI => Similarity2::identity(),
-                Layer::Inventory => inventory_transform,
-            };
-            for BufferedDraw {
-                draw_ref,
-                position,
-                param,
-            } in images
-            {
-                draw_ref.draw(ctx, param.dest(transform * position))?;
-            }
+    pub fn execute(self) -> ggez::GameResult<()> {
+        for (layer, canvas) in self.layers {
+            canvas.into_inner().draw(self.ctx, DrawParam::new())?;
         }
         Ok(())
     }
