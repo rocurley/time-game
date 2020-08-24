@@ -34,15 +34,17 @@ impl<'a> DrawBuffer<'a> {
         let graphics::Rect { x: x0, y: y0, .. } = graphics::screen_coordinates(ctx);
         let world_transform: Similarity2<f32> = Similarity2::new(Vector2::new(x0, y0), 0., SCALE);
         let inventory_transform = inventory_transform(ctx);
-        let layer_0 = Canvas::with_window_size(ctx)?;
-        let layer_1 = Canvas::with_window_size(ctx)?;
-        let layer_2 = Canvas::with_window_size(ctx)?;
-        let layer_3 = Canvas::with_window_size(ctx)?;
+        // We do this nonsense because enum_map! makes a closure under the hood, and that closure
+        // doesn't return a Result. Similarly, we can't, say, use array indexing because the
+        // closure is called multiple times (once per enum).
+        let mut layers_vec = (0..4)
+            .map(|_| Canvas::with_window_size(ctx))
+            .collect::<ggez::GameResult<Vec<Canvas>>>()?;
         let layers = enum_map! {
-                Layer::Background => layer_0,
-                Layer::Foreground => layer_1,
-                Layer::UI => layer_2,
-                Layer::Inventory => layer_3,
+                Layer::Background => layers_vec.pop().unwrap(),
+                Layer::Foreground => layers_vec.pop().unwrap(),
+                Layer::UI => layers_vec.pop().unwrap(),
+                Layer::Inventory => layers_vec.pop().unwrap(),
         };
         Ok(DrawBuffer {
             ctx,
@@ -73,7 +75,7 @@ impl<'a> DrawBuffer<'a> {
         draw_layer: DrawLayer,
         param: DrawParam,
         pt: P,
-    ) {
+    ) -> ggez::GameResult<()> {
         let DrawLayer { draw_ref, layer } = draw_layer;
         let position = nalgebra::convert::<P, Point2>(pt);
         let draw = BufferedDraw {
@@ -81,9 +83,49 @@ impl<'a> DrawBuffer<'a> {
             position,
             param,
         };
-        self.draw(layer, draw);
+        self.draw(layer, draw)
     }
-    pub fn push<P: SubsetOf<Point2>>(&mut self, draw_layer: DrawLayer, pt: P) {
+    pub fn draw_grid(
+        &mut self,
+        layer: Layer,
+        bounds: graphics::Rect,
+        color: graphics::Color,
+    ) -> ggez::GameResult<()> {
+        graphics::set_canvas(self.ctx, Some(&self.layers[layer]));
+        let mut x = bounds.x;
+        let mut y = bounds.y;
+        while x <= bounds.x + bounds.w {
+            Mesh::new_line(
+                self.ctx,
+                &[[x, bounds.y - 2.5], [x, bounds.y + bounds.h + 2.5]],
+                5.,
+                color,
+            )?
+            .draw(self.ctx, DrawParam::default())?;
+            x += SCALE;
+        }
+        while y <= bounds.y + bounds.h {
+            Mesh::new_line(
+                self.ctx,
+                &[[bounds.x - 2.5, y], [bounds.x + bounds.w + 2.5, y]],
+                5.,
+                color,
+            )?
+            .draw(self.ctx, DrawParam::default())?;
+            y += SCALE;
+        }
+        graphics::set_canvas(self.ctx, None);
+        Ok(())
+    }
+    pub fn draw_map_grid(&mut self, color: graphics::Color) -> ggez::GameResult<()> {
+        let bounds = graphics::screen_coordinates(self.ctx);
+        self.draw_grid(Layer::Foreground, bounds, color)
+    }
+    pub fn push<P: SubsetOf<Point2>>(
+        &mut self,
+        draw_layer: DrawLayer,
+        pt: P,
+    ) -> ggez::GameResult<()> {
         let DrawLayer { draw_ref, layer } = draw_layer;
         let position = nalgebra::convert::<P, Point2>(pt);
         let draw = BufferedDraw {
@@ -91,59 +133,25 @@ impl<'a> DrawBuffer<'a> {
             position,
             param: DrawParam::new(),
         };
-        self.draw(layer, draw);
+        self.draw(layer, draw)
     }
     pub fn push_rotated<P: SubsetOf<Point2>>(
         &mut self,
         draw_layer: DrawLayer,
         pt: P,
         rotation: f32,
-    ) {
+    ) -> ggez::GameResult<()> {
         let position = nalgebra::convert::<P, Point2>(pt) + Vector2::new(0.5, 0.5);
         let param = DrawParam::new().offset([0.5, 0.5]).rotation(rotation);
-        self.push_with_param(draw_layer, param, position);
+        self.push_with_param(draw_layer, param, position)?;
+        Ok(())
     }
     pub fn execute(self) -> ggez::GameResult<()> {
-        for (layer, canvas) in self.layers {
-            canvas.into_inner().draw(self.ctx, DrawParam::new())?;
+        for (_layer, canvas) in self.layers {
+            canvas.draw(self.ctx, DrawParam::new())?;
         }
         Ok(())
     }
-}
-
-pub fn draw_grid(
-    ctx: &mut ggez::Context,
-    bounds: graphics::Rect,
-    color: graphics::Color,
-) -> ggez::GameResult<()> {
-    let mut x = bounds.x;
-    let mut y = bounds.y;
-    while x <= bounds.x + bounds.w {
-        Mesh::new_line(
-            ctx,
-            &[[x, bounds.y - 2.5], [x, bounds.y + bounds.h + 2.5]],
-            5.,
-            color,
-        )?
-        .draw(ctx, DrawParam::default())?;
-        x += SCALE;
-    }
-    while y <= bounds.y + bounds.h {
-        Mesh::new_line(
-            ctx,
-            &[[bounds.x - 2.5, y], [bounds.x + bounds.w + 2.5, y]],
-            5.,
-            color,
-        )?
-        .draw(ctx, DrawParam::default())?;
-        y += SCALE;
-    }
-    Ok(())
-}
-
-pub fn draw_map_grid(ctx: &mut ggez::Context, color: graphics::Color) -> ggez::GameResult<()> {
-    let bounds = graphics::screen_coordinates(ctx);
-    draw_grid(ctx, bounds, color)
 }
 
 pub fn inventory_bbox(ctx: &ggez::Context) -> graphics::Rect {
@@ -197,7 +205,7 @@ pub fn render_inventory(
             );
             let mut draw_ref = inventory_cell.item.image(image_map);
             draw_ref.layer = Layer::Inventory;
-            buffer.push(draw_ref, tile_space_pt);
+            buffer.push(draw_ref, tile_space_pt)?;
             let text = graphics::Text::new(inventory_cell.count.to_string());
             buffer.push(
                 DrawLayer {
@@ -205,7 +213,7 @@ pub fn render_inventory(
                     draw_ref: text.into(),
                 },
                 nalgebra::convert::<_, Point2>(tile_space_pt) + Vector2::new(0.2, 0.2),
-            );
+            )?;
         }
     }
     for &i in selected_item_option {
@@ -215,12 +223,12 @@ pub fn render_inventory(
         );
         let mut image = image_map.selection.clone();
         image.layer = Layer::Inventory;
-        buffer.push(image, tile_space_pt);
+        buffer.push(image, tile_space_pt)?;
     }
     Ok(())
 }
 
-pub fn ecs(ecs: &ECS, buffer: &mut DrawBuffer) {
+pub fn ecs(ecs: &ECS, buffer: &mut DrawBuffer) -> ggez::GameResult<()> {
     for (entity, draw_layer) in ecs.images.iter() {
         if !ecs.entities.contains_key(entity) {
             continue;
@@ -229,6 +237,7 @@ pub fn ecs(ecs: &ECS, buffer: &mut DrawBuffer) {
             Some(pt) => *pt,
             None => continue,
         };
-        buffer.push(draw_layer.clone(), pt);
+        buffer.push(draw_layer.clone(), pt)?;
     }
+    Ok(())
 }

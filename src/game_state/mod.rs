@@ -4,17 +4,12 @@ use ggez::{
 };
 use std::f32::consts::PI;
 
-use ggez::nalgebra::{Similarity2, Vector2};
-
 use crate::{game_frame::*, types::*};
 
 use super::tree;
 use crate::{
     portal_graph::render_item_graph,
-    render::{
-        self, draw_map_grid, inventory_bbox, pixel_space_to_tile_space, render_inventory,
-        DrawBuffer,
-    },
+    render::{self, inventory_bbox, pixel_space_to_tile_space, render_inventory, DrawBuffer},
 };
 
 mod planning;
@@ -319,9 +314,9 @@ impl event::EventHandler for GameState {
         let white: Color = (255, 255, 255).into();
         graphics::clear(ctx, white);
         let frame = self.history.get_focus_val();
-        let mut buffer: DrawBuffer = DrawBuffer::new(ctx)?;
-        render::ecs(&frame.ecs, &mut buffer);
-        draw_map_grid(ctx, black)?;
+        let mut buffer = DrawBuffer::new(ctx)?;
+        render::ecs(&frame.ecs, &mut buffer)?;
+        buffer.draw_map_grid(black)?;
         // TODO: this should be over entities with positions and plans. IIRC the ECS talk gave some
         // advice on how to structure stuff like this: ideally this would be a "system" that we'd
         // say requires a position and a plan and we'd just pass it a function that takes both,
@@ -348,20 +343,20 @@ impl event::EventHandler for GameState {
                 Move::PickUp => (&self.image_map.pick_up_icon, 0.),
                 Move::Drop(_) => (&self.image_map.drop_icon, 0.),
             };
-            buffer.push_rotated(image.clone(), *position, rotation);
+            buffer.push_rotated(image.clone(), *position, rotation)?;
         }
         for pt in &self.current_plan.get(&self.history.focus.children).portals {
-            buffer.push(self.image_map.jump_icon.clone(), *pt);
+            buffer.push(self.image_map.jump_icon.clone(), *pt)?;
         }
         for (_, portal) in self.history.get_focus_val().portals.iter() {
-            buffer.push(self.image_map.portal.clone(), portal.player_position);
+            buffer.push(self.image_map.portal.clone(), portal.player_position)?;
         }
         for (_, item_drop) in self.history.get_focus_val().items.iter() {
-            buffer.push(item_drop.item.image(&self.image_map), item_drop.position);
+            buffer.push(item_drop.item.image(&self.image_map), item_drop.position)?;
         }
         match self.selected {
             Selection::Top => {}
-            Selection::GridCell(pt) => buffer.push(self.image_map.selection.clone(), pt),
+            Selection::GridCell(pt) => buffer.push(self.image_map.selection.clone(), pt)?,
             Selection::Player(player_id) | Selection::WishPicker(player_id, _) => {
                 let position = *self
                     .history
@@ -370,7 +365,7 @@ impl event::EventHandler for GameState {
                     .positions
                     .get(player_id)
                     .expect("Missing position for selected player");
-                buffer.push(self.image_map.selection.clone(), position);
+                buffer.push(self.image_map.selection.clone(), position)?;
             }
             Selection::Inventory(player_id, ref selected_item_option) => {
                 let inventory = self
