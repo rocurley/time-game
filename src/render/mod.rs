@@ -182,21 +182,30 @@ pub fn render_inventory(
     image_map: &ImageMap,
     selected_item_option: &Option<usize>,
 ) -> ggez::GameResult<()> {
-    /*
-    let bounds = inventory_bbox(ctx);
     let background = match *inventory {
         Inventory::Actual(_) => graphics::Color::from_rgb(127, 127, 127),
         Inventory::Hypothetical(_) => graphics::Color::from_rgb(127, 127, 255),
     };
-    Mesh::new_rectangle(
-        ctx,
-        graphics::DrawMode::Fill(Default::default()),
-        bounds,
-        background,
-    )?
-    .draw(ctx, DrawParam::new())?;
-    draw_grid(ctx, bounds, (0, 0, 0).into())?;
-    */
+    let bounds = ggez::graphics::Rect {
+        x: 0.,
+        y: 0.,
+        w: INVENTORY_WIDTH as f32 * SCALE,
+        h: INVENTORY_HEIGHT as f32 * SCALE,
+    };
+    let inventory_bg =
+        Mesh::new_rectangle(buffer.ctx, graphics::DrawMode::fill(), bounds, background)?;
+    buffer.push(
+        DrawLayer {
+            layer: Layer::Inventory,
+            draw_ref: inventory_bg.into(),
+        },
+        Point2::new(0., 0.),
+    )?;
+    buffer.draw_grid(
+        Layer::Inventory,
+        inventory_bbox(buffer.ctx),
+        (0, 0, 0).into(),
+    )?;
     for (i, inventory_cell_option) in inventory.cells().iter().enumerate() {
         for inventory_cell in inventory_cell_option.iter() {
             let tile_space_pt = Point::new(
